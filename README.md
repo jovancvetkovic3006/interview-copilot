@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Interview Copilot
+
+AI-powered technical interview assistant with a live code editor, intelligent interview agent, and automated review generation.
+
+## Features
+
+- **Interview Setup** — Configure role, difficulty level, topics, and interviewee name
+- **AI Interview Agent** — GPT-4o powered agent that asks technical questions and assigns coding tasks
+- **Live Code Editor** — Monaco Editor (VS Code engine) for coding tasks during interviews
+- **Real-time Chat** — Conversational interface between the agent and interviewee
+- **Interviewer Notes** — Take notes during the interview categorized by type (strength, weakness, etc.)
+- **Automated Review** — AI-generated comprehensive review with scores, strengths, weaknesses, and hire recommendation
+
+## Tech Stack
+
+- **Next.js** (App Router) + **React** + **TypeScript**
+- **TailwindCSS** for styling
+- **Monaco Editor** for the code editor
+- **Zustand** for state management
+- **OpenAI GPT-4o** for the AI interview agent
+- **Lucide React** for icons
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Node.js 18+
+- An OpenAI API key
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/jovancvetkovic3006/interview-copilot.git
+   cd interview-copilot
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-## Learn More
+3. Create a `.env.local` file in the project root:
+   ```
+   OPENAI_API_KEY=your-openai-api-key-here
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+5. Open [http://localhost:3000](http://localhost:3000)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## How It Works
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Setup** — Fill in the interviewee's name, select the role, difficulty, and topics
+2. **Interview** — The AI agent starts the interview, asks questions, and assigns coding tasks
+3. **Code** — When a coding task is assigned, write the solution in the Monaco editor and submit
+4. **Notes** — Take notes during the interview using the note-taking feature
+5. **Review** — End the interview to generate a comprehensive AI review with scores and recommendations
