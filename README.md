@@ -5,7 +5,7 @@ AI-powered technical interview assistant with a live code editor, intelligent in
 ## Features
 
 - **Interview Setup** — Configure role, difficulty level, topics, and interviewee name
-- **AI Interview Agent** — GPT-4o powered agent that asks technical questions and assigns coding tasks
+- **AI Interview Agent** — Claude-powered agent that asks technical questions and assigns coding tasks
 - **Live Code Editor** — Monaco Editor (VS Code engine) for coding tasks during interviews
 - **Real-time Chat** — Conversational interface between the agent and interviewee
 - **Interviewer Notes** — Take notes during the interview categorized by type (strength, weakness, etc.)
@@ -17,7 +17,7 @@ AI-powered technical interview assistant with a live code editor, intelligent in
 - **TailwindCSS** for styling
 - **Monaco Editor** for the code editor
 - **Zustand** for state management
-- **OpenAI GPT-4o** for the AI interview agent
+- **Anthropic Claude** for the AI interview agent
 - **Lucide React** for icons
 
 ## Getting Started
@@ -25,7 +25,7 @@ AI-powered technical interview assistant with a live code editor, intelligent in
 ### Prerequisites
 
 - Node.js 18+
-- An OpenAI API key
+- An Anthropic API key
 
 ### Setup
 
@@ -42,7 +42,7 @@ AI-powered technical interview assistant with a live code editor, intelligent in
 
 3. Create a `.env.local` file in the project root:
    ```
-   OPENAI_API_KEY=your-openai-api-key-here
+   ANTHROPIC_API_KEY=your-anthropic-api-key-here
    ```
 
 4. Run the development server:

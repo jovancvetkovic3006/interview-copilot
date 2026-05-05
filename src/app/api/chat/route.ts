@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-function getOpenAIClient() {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY environment variable is not set. Please add it to .env.local");
+function getAnthropicClient() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY environment variable is not set. Please add it to .env.local");
   }
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
 function buildSystemPrompt(config: {
@@ -136,23 +136,21 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = buildSystemPrompt(config);
 
-    const openaiMessages = [
-      { role: "system" as const, content: systemPrompt },
-      ...messages.map((m: { role: string; content: string }) => ({
-        role: m.role === "agent" ? ("assistant" as const) : ("user" as const),
-        content: m.content,
-      })),
-    ];
+    const claudeMessages = messages.map((m: { role: string; content: string }) => ({
+      role: m.role === "agent" ? ("assistant" as const) : ("user" as const),
+      content: m.content,
+    }));
 
-    const client = getOpenAIClient();
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages: openaiMessages,
+    const client = getAnthropicClient();
+    const completion = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      system: systemPrompt,
+      messages: claudeMessages,
       temperature: 0.7,
       max_tokens: 1500,
     });
 
-    const responseContent = completion.choices[0]?.message?.content || "";
+    const responseContent = completion.content[0]?.type === "text" ? completion.content[0].text : "";
 
     return NextResponse.json({ content: responseContent });
   } catch (error: unknown) {
@@ -234,15 +232,16 @@ ${scoresJson}
 
 Return ONLY valid JSON, no markdown formatting.`;
 
-  const client = getOpenAIClient();
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o",
-    messages: [{ role: "system", content: reviewPrompt }],
+  const client = getAnthropicClient();
+  const completion = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    system: reviewPrompt,
+    messages: [{ role: "user", content: "Please generate the interview review now." }],
     temperature: 0.3,
     max_tokens: 3000,
   });
 
-  const content = completion.choices[0]?.message?.content || "{}";
+  const content = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
 
   try {
     const review = JSON.parse(content);

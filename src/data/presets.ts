@@ -88,6 +88,48 @@ export const PREDEFINED_QUESTIONS: Record<string, PredefinedQuestion[]> = {
 };
 
 export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
+  "General": [
+    {
+      id: "ct-gen-1",
+      title: "Find the Maximum in an Array",
+      description: "Write a function that loops through an array of numbers and returns the largest value. Do not use Math.max or built-in sort.",
+      starterCode: "function findMax(numbers) {\n  // Loop through the array and find the maximum value\n}",
+      language: "javascript",
+      difficulty: "junior",
+    },
+    {
+      id: "ct-gen-2",
+      title: "Reverse an Array In-Place",
+      description: "Write a function that reverses an array in-place without creating a new array. Use a loop to swap elements from both ends.",
+      starterCode: "function reverseArray(arr) {\n  // Reverse the array in-place using a loop\n}",
+      language: "javascript",
+      difficulty: "junior",
+    },
+    {
+      id: "ct-gen-3",
+      title: "Remove Duplicates from an Array",
+      description: "Write a function that takes an array and returns a new array with duplicates removed, preserving the original order. Do not use Set.",
+      starterCode: "function removeDuplicates(arr) {\n  // Loop through and remove duplicates\n}",
+      language: "javascript",
+      difficulty: "junior",
+    },
+    {
+      id: "ct-gen-4",
+      title: "Two Sum",
+      description: "Given an array of numbers and a target sum, return the indices of two numbers that add up to the target. Each input has exactly one solution.",
+      starterCode: "function twoSum(nums, target) {\n  // Find two indices whose values add up to target\n}",
+      language: "javascript",
+      difficulty: "mid",
+    },
+    {
+      id: "ct-gen-5",
+      title: "FizzBuzz",
+      description: "Write a function that returns an array of strings from 1 to n. For multiples of 3 use 'Fizz', multiples of 5 use 'Buzz', multiples of both use 'FizzBuzz', otherwise the number as a string.",
+      starterCode: "function fizzBuzz(n) {\n  // Return array of FizzBuzz results from 1 to n\n}",
+      language: "javascript",
+      difficulty: "junior",
+    },
+  ],
   "Frontend Developer": [
     {
       id: "ct-fe-1",

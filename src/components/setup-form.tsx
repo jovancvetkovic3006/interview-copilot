@@ -300,10 +300,8 @@ export function SetupForm() {
     });
   };
 
-  const isStep1Valid = topics.length > 0;
   const isStep2Valid = intervieweeName.trim().length > 0;
-  const canProceed =
-    step === 0 ? isStep1Valid : step === 1 ? isStep2Valid : true;
+  const canProceed = step === 1 ? isStep2Valid : true;
 
   const nextStep = () => {
     if (step < STEPS.length - 1 && canProceed) setStep(step + 1);
@@ -313,7 +311,10 @@ export function SetupForm() {
   };
 
   const availableQuestions = PREDEFINED_QUESTIONS[effectiveRole] || [];
-  const availableCodingTasks = CODING_TASK_PRESETS[effectiveRole] || [];
+  const availableCodingTasks = [
+    ...(CODING_TASK_PRESETS["General"] || []),
+    ...(CODING_TASK_PRESETS[effectiveRole] || []),
+  ];
 
   return (
     <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
@@ -889,7 +890,7 @@ export function SetupForm() {
             ) : (
               <Button
                 onClick={handleStart}
-                disabled={!isStep1Valid || !isStep2Valid}
+                disabled={!isStep2Valid}
                 variant="default"
                 size="lg"
               >

@@ -40,6 +40,7 @@ export function ChatPanel() {
   const setAgentTyping = useInterviewStore((s) => s.setAgentTyping);
   const addNote = useInterviewStore((s) => s.addNote);
   const endSession = useInterviewStore((s) => s.endSession);
+  const setPhase = useInterviewStore((s) => s.setPhase);
   const setGeneratingReview = useInterviewStore((s) => s.setGeneratingReview);
   const setReview = useInterviewStore((s) => s.setReview);
 
@@ -75,16 +76,24 @@ export function ChatPanel() {
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      if (!text) {
+        setPhase("review");
+        return;
+      }
+      const data = JSON.parse(text);
       if (data.review) {
         setReview(data.review);
+      } else {
+        setPhase("review");
       }
     } catch (err) {
       console.error("Failed to generate review:", err);
+      setPhase("review");
     } finally {
       setGeneratingReview(false);
     }
-  }, [session, setGeneratingReview, setReview]);
+  }, [session, setGeneratingReview, setReview, setPhase]);
 
   const sendToAgent = useCallback(async (messages: { role: string; content: string }[]) => {
     if (!session) return;
@@ -103,7 +112,7 @@ export function ChatPanel() {
       const data = await res.json();
 
       if (data.error) {
-        addMessage("agent", `Error: ${data.error}. Please make sure your OPENAI_API_KEY is set in .env.local`);
+        addMessage("agent", `Error: ${data.error}. Please make sure your ANTHROPIC_API_KEY is set in .env.local`);
         setAgentTyping(false);
         return;
       }
@@ -172,7 +181,12 @@ export function ChatPanel() {
   const handleEndInterview = async () => {
     if (!session) return;
     endSession();
-    await generateReview();
+    try {
+      await generateReview();
+    } catch {
+      // Even if review generation fails, move to review phase
+      setPhase("review");
+    }
   };
 
   if (!session) return null;

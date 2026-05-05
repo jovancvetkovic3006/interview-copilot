@@ -15,6 +15,8 @@ import {
   GripVertical,
   Maximize2,
   Minimize2,
+  Plus,
+  Square,
 } from "lucide-react";
 
 function InterviewTimer({ startedAt }: { startedAt: number }) {
@@ -39,11 +41,51 @@ function InterviewTimer({ startedAt }: { startedAt: number }) {
 
 export function InterviewPage() {
   const session = useInterviewStore((s) => s.session);
+  const assignCodingTask = useInterviewStore((s) => s.assignCodingTask);
+  const endSession = useInterviewStore((s) => s.endSession);
+  const setPhase = useInterviewStore((s) => s.setPhase);
+  const setGeneratingReview = useInterviewStore((s) => s.setGeneratingReview);
+  const setReview = useInterviewStore((s) => s.setReview);
   const [activePanel, setActivePanel] = useState<"chat" | "code">("chat");
   const [splitRatio, setSplitRatio] = useState(50);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showTaskPicker, setShowTaskPicker] = useState(false);
 
   if (!session) return null;
+
+  const handleAssignTask = (task: { title: string; description: string; starterCode: string; language: string }) => {
+    assignCodingTask(task);
+    setShowTaskPicker(false);
+    setActivePanel("code");
+  };
+
+  const handleEndInterview = async () => {
+    endSession();
+    setGeneratingReview(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generate-review",
+          messages: session.messages,
+          config: session.config,
+          codingTasks: session.codingTasks,
+          notes: session.notes,
+        }),
+      });
+      const data = await res.json();
+      if (data.review) {
+        setReview(data.review);
+      } else {
+        setPhase("review");
+      }
+    } catch {
+      setPhase("review");
+    } finally {
+      setGeneratingReview(false);
+    }
+  };
 
   const toggleFullscreen = () => {
     if (isFullscreen) {
@@ -81,6 +123,43 @@ export function InterviewPage() {
             <Clock className="h-3.5 w-3.5" />
             <InterviewTimer startedAt={session.startedAt} />
           </div>
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTaskPicker(!showTaskPicker)}
+              title="Add coding task"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <Code2 className="h-3.5 w-3.5" />
+            </Button>
+            {showTaskPicker && (
+              <div className="absolute right-0 top-full mt-1 w-80 max-h-64 overflow-y-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 p-2">
+                {session.config.selectedCodingTasks.length > 0 ? (
+                  session.config.selectedCodingTasks.map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={() => handleAssignTask(task)}
+                      className="w-full text-left p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                    >
+                      <div className="text-sm font-medium">{task.title}</div>
+                      <div className="text-xs text-zinc-500 mt-0.5">{task.language} &middot; {task.difficulty}</div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-xs text-zinc-500 p-2 text-center">No pre-selected tasks. Use the chat to request one from the agent.</div>
+                )}
+              </div>
+            )}
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleEndInterview}
+          >
+            <Square className="h-3 w-3" />
+            End
+          </Button>
         </div>
       </div>
 
