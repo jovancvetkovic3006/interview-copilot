@@ -19,6 +19,23 @@ export interface TranscriptEntry {
   timestamp: number;
 }
 
+/** Background speech analysis — shared in room state but only shown to interviewer & observer clients. */
+export interface TranscriptAnalysisEntry {
+  id: string;
+  timestamp: number;
+  /** Transcript array length after this analysis window (for dedupe / debugging). */
+  transcriptEndLength: number;
+  summary: string;
+  score: number;
+  answerQuality: "strong" | "adequate" | "weak" | "insufficient" | "n/a";
+}
+
+/** Post-interview summary generated once per room (shared via PartyKit). */
+export interface InterviewReport {
+  markdown: string;
+  generatedAt: number;
+}
+
 export interface RoomState {
   participants: Participant[];
   messages: ChatMessage[];
@@ -26,6 +43,8 @@ export interface RoomState {
   phase: "setup" | "interview" | "review";
   transcript: TranscriptEntry[];
   codingTask: unknown | null;
+  transcriptAnalyses: TranscriptAnalysisEntry[];
+  interviewReport: InterviewReport | null;
 }
 
 export type RoomMessage =
@@ -38,5 +57,7 @@ export type RoomMessage =
   | { type: "phase"; phase: string }
   | { type: "coding-task"; task: unknown }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
+  | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
+  | { type: "interview-report"; report: InterviewReport }
   | { type: "sync-request" }
   | { type: "sync-response"; state: RoomState };

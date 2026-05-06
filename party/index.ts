@@ -1,5 +1,15 @@
 import type * as Party from "partykit/server";
 
+/** Mirrors `TranscriptAnalysisEntry` in src/types/room.ts (kept local for PartyKit bundle). */
+interface TranscriptAnalysisEntry {
+  id: string;
+  timestamp: number;
+  transcriptEndLength: number;
+  summary: string;
+  score: number;
+  answerQuality: "strong" | "adequate" | "weak" | "insufficient" | "n/a";
+}
+
 // Message types for room communication
 export type RoomMessage =
   | { type: "join"; participant: Participant }
@@ -11,6 +21,8 @@ export type RoomMessage =
   | { type: "phase"; phase: string }
   | { type: "coding-task"; task: unknown }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
+  | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
+  | { type: "interview-report"; report: InterviewReport }
   | { type: "sync-request" }
   | { type: "sync-response"; state: RoomState };
 
@@ -29,6 +41,11 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+interface InterviewReport {
+  markdown: string;
+  generatedAt: number;
+}
+
 interface RoomState {
   participants: Participant[];
   messages: ChatMessage[];
@@ -36,6 +53,8 @@ interface RoomState {
   phase: "setup" | "interview" | "review";
   transcript: { text: string; speaker: string; timestamp: number }[];
   codingTask: unknown | null;
+  transcriptAnalyses: TranscriptAnalysisEntry[];
+  interviewReport: InterviewReport | null;
 }
 
 export default class InterviewRoom implements Party.Server {
@@ -48,6 +67,8 @@ export default class InterviewRoom implements Party.Server {
     phase: "setup",
     transcript: [],
     codingTask: null,
+    transcriptAnalyses: [],
+    interviewReport: null,
   };
 
   onConnect(conn: Party.Connection) {
@@ -140,7 +161,24 @@ export default class InterviewRoom implements Party.Server {
           speaker: data.speaker,
           timestamp: data.timestamp,
         });
+        const preview =
+          data.text.length > 100 ? `${data.text.slice(0, 100)}…` : data.text;
+        console.log(
+          `[transcription/party] transcript speaker=${data.speaker} chars=${data.text.length} lines=${this.state.transcript.length} preview=${JSON.stringify(preview)}`
+        );
         this.room.broadcast(JSON.stringify(data), [sender.id]);
+        break;
+      }
+
+      case "transcript-analysis": {
+        this.state.transcriptAnalyses.push(data.analysis);
+        this.room.broadcast(JSON.stringify(data), [sender.id]);
+        break;
+      }
+
+      case "interview-report": {
+        this.state.interviewReport = data.report;
+        this.room.broadcast(JSON.stringify(data));
         break;
       }
 

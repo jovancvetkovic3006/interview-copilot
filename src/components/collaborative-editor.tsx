@@ -168,7 +168,8 @@ export function CollaborativeEditor({
     };
   }, [roomId, taskRoomSuffix]);
 
-  const handleEditorMount = async (editorInstance: editor.IStandaloneCodeEditor, _monaco: Monaco) => {
+  const handleEditorMount = async (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    void monaco;
     const mountGen = ++editorMountGenerationRef.current;
     editorRef.current = editorInstance;
 

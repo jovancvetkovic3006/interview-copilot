@@ -2,19 +2,36 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import PartySocket from "partysocket";
-import type { Participant, RoomState, RoomMessage, ChatMessage, TranscriptEntry } from "@/types/room";
+import { transcriptionTrace } from "@/lib/transcription-trace";
+import type {
+  Participant,
+  RoomState,
+  RoomMessage,
+  ChatMessage,
+  TranscriptEntry,
+  TranscriptAnalysisEntry,
+  InterviewReport,
+} from "@/types/room";
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999";
 
 export function usePartyRoom(roomId: string | null, participant: Participant | null) {
   const socketRef = useRef<PartySocket | null>(null);
+  const participantRoleRef = useRef<Participant["role"] | null>(null);
+
   const [connected, setConnected] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [transcriptAnalyses, setTranscriptAnalyses] = useState<TranscriptAnalysisEntry[]>([]);
   const [phase, setPhase] = useState<RoomState["phase"]>("setup");
   const [config, setConfig] = useState<unknown | null>(null);
   const [codingTask, setCodingTask] = useState<unknown | null>(null);
+  const [interviewReport, setInterviewReport] = useState<InterviewReport | null>(null);
+
+  useEffect(() => {
+    participantRoleRef.current = participant?.role ?? null;
+  }, [participant?.role]);
 
   useEffect(() => {
     if (!roomId || !participant) return;
@@ -65,19 +82,55 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
         case "coding-task":
           setCodingTask(data.task);
           break;
-        case "transcript":
+        case "transcript": {
+          const preview =
+            data.text.length > 120 ? `${data.text.slice(0, 120)}…` : data.text;
+          transcriptionTrace("socket ← transcript", {
+            speaker: data.speaker,
+            chars: data.text.length,
+            preview,
+            ts: data.timestamp,
+          });
           setTranscript((prev) => [
             ...prev,
             { text: data.text, speaker: data.speaker, timestamp: data.timestamp },
           ]);
           break;
+        }
+        case "transcript-analysis":
+          if (participantRoleRef.current === "interviewee") break;
+          transcriptionTrace("socket ← transcript-analysis", {
+            id: data.analysis.id,
+            score: data.analysis.score,
+            answerQuality: data.analysis.answerQuality,
+          });
+          setTranscriptAnalyses((prev) => [...prev, data.analysis]);
+          break;
+        case "interview-report":
+          if (participantRoleRef.current === "interviewee") break;
+          setInterviewReport(data.report);
+          break;
         case "sync-response":
+          transcriptionTrace("socket ← sync-response", {
+            participants: data.state.participants.length,
+            messages: data.state.messages.length,
+            transcriptLines: data.state.transcript.length,
+            analyses: (data.state.transcriptAnalyses ?? []).length,
+          });
           setParticipants(data.state.participants);
           setMessages(data.state.messages);
           setTranscript(data.state.transcript);
           setPhase(data.state.phase);
           setConfig(data.state.config);
           setCodingTask(data.state.codingTask);
+          setTranscriptAnalyses(
+            participantRoleRef.current === "interviewee"
+              ? []
+              : (data.state.transcriptAnalyses ?? [])
+          );
+          setInterviewReport(
+            participantRoleRef.current === "interviewee" ? null : (data.state.interviewReport ?? null)
+          );
           break;
       }
     });
@@ -125,11 +178,35 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   }, []);
 
   const sendTranscript = useCallback((text: string, speaker: string) => {
-    if (!socketRef.current) return;
     const entry = { text, speaker, timestamp: Date.now() };
+    const preview = text.length > 120 ? `${text.slice(0, 120)}…` : text;
+    transcriptionTrace("sendTranscript (local + optional wire)", {
+      speaker,
+      chars: text.length,
+      preview,
+      socketOpen: Boolean(socketRef.current),
+    });
     setTranscript((prev) => [...prev, entry]);
+    if (!socketRef.current) return;
     socketRef.current.send(
       JSON.stringify({ type: "transcript", ...entry } satisfies RoomMessage)
+    );
+  }, []);
+
+  const sendTranscriptAnalysis = useCallback((analysis: TranscriptAnalysisEntry) => {
+    if (!socketRef.current) return;
+    if (participantRoleRef.current === "interviewee") return;
+    setTranscriptAnalyses((prev) => [...prev, analysis]);
+    socketRef.current.send(
+      JSON.stringify({ type: "transcript-analysis", analysis } satisfies RoomMessage)
+    );
+  }, []);
+
+  const sendInterviewReport = useCallback((report: InterviewReport) => {
+    setInterviewReport(report);
+    if (!socketRef.current) return;
+    socketRef.current.send(
+      JSON.stringify({ type: "interview-report", report } satisfies RoomMessage)
     );
   }, []);
 
@@ -138,14 +215,18 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     participants,
     messages,
     transcript,
+    transcriptAnalyses,
     phase,
     config,
     codingTask,
+    interviewReport,
     sendChat,
     sendAgentResponse,
     sendConfig,
     sendPhase,
     sendCodingTask,
     sendTranscript,
+    sendTranscriptAnalysis,
+    sendInterviewReport,
   };
 }
