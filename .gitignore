@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# partykit (local dev durable object / yjs sqlite state)
+.partykit/
+
 # production
 /build
 
