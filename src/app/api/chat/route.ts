@@ -1,11 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
+// Model fallback chain — tries each model in order until one works
+const MODEL_FALLBACK_CHAIN = [
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-5-20250929",
+  "claude-opus-4-6",
+];
+
 function getAnthropicClient() {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY environment variable is not set. Please add it to .env.local");
   }
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
+
+async function createMessageWithFallback(
+  client: Anthropic,
+  params: Omit<Anthropic.Messages.MessageCreateParamsNonStreaming, "model">
+) {
+  let lastError: unknown = null;
+  for (const model of MODEL_FALLBACK_CHAIN) {
+    try {
+      return await client.messages.create({ ...params, model });
+    } catch (err: unknown) {
+      lastError = err;
+      // Only retry on 404 (model not found), throw on other errors
+      if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 404) {
+        console.warn(`Model ${model} not found, trying next...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
 }
 
 function buildSystemPrompt(config: {
@@ -142,8 +171,7 @@ export async function POST(req: NextRequest) {
     }));
 
     const client = getAnthropicClient();
-    const completion = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+    const completion = await createMessageWithFallback(client, {
       system: systemPrompt,
       messages: claudeMessages,
       temperature: 0.7,
@@ -155,8 +183,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ content: responseContent });
   } catch (error: unknown) {
     console.error("Chat API error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to process request";
+    let message = "Failed to process request";
+    if (error instanceof Error) {
+      message = error.message;
+    }
+    // Surface Anthropic SDK error details
+    if (error && typeof error === "object" && "status" in error) {
+      const apiErr = error as { status: number; message?: string; error?: { message?: string } };
+      message = `${apiErr.status}: ${apiErr.error?.message || apiErr.message || message}`;
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -172,8 +207,9 @@ async function generateReview(body: {
   };
   codingTasks: { title: string; submittedCode?: string; description: string }[];
   notes: { category: string; content: string }[];
+  transcript?: { text: string; speaker: string; timestamp: number }[];
 }) {
-  const { messages, config, codingTasks, notes } = body;
+  const { messages, config, codingTasks, notes, transcript } = body;
 
   const conversationSummary = messages
     .map(
@@ -205,12 +241,16 @@ async function generateReview(body: {
     .map((cat) => `    {"category": "${cat}", "score": <1-10>, "comment": "<comment>"}`)
     .join(",\n");
 
+  const transcriptSummary = transcript && transcript.length > 0
+    ? transcript.map((t) => `[${new Date(t.timestamp).toLocaleTimeString()}] ${t.speaker}: ${t.text}`).join("\n")
+    : "";
+
   const reviewPrompt = `You are reviewing a technical interview for a ${config.difficulty}-level ${config.role} position.
 Interviewee: ${config.intervieweeName}
 
 FULL CONVERSATION:
 ${conversationSummary}
-
+${transcriptSummary ? `\nAUDIO TRANSCRIPT (spoken during the interview):\n${transcriptSummary}\n` : ""}
 CODING TASKS:
 ${codingTasksSummary}
 
@@ -233,8 +273,7 @@ ${scoresJson}
 Return ONLY valid JSON, no markdown formatting.`;
 
   const client = getAnthropicClient();
-  const completion = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const completion = await createMessageWithFallback(client, {
     system: reviewPrompt,
     messages: [{ role: "user", content: "Please generate the interview review now." }],
     temperature: 0.3,

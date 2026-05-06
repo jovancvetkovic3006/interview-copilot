@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import type {
   Difficulty,
+  InterviewConfig,
   PreInterviewTask,
   UploadedFile,
   PredefinedQuestion,
@@ -158,7 +159,13 @@ function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
-export function SetupForm() {
+interface SetupFormProps {
+  onStart?: (config: InterviewConfig) => void;
+  title?: string;
+  subtitle?: string;
+}
+
+export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const startSession = useInterviewStore((s) => s.startSession);
   const [step, setStep] = useState(0);
 
@@ -284,7 +291,7 @@ export function SetupForm() {
           }
         : undefined;
 
-    startSession({
+    const config: InterviewConfig = {
       intervieweeName: intervieweeName.trim(),
       role: effectiveRole,
       difficulty,
@@ -297,7 +304,13 @@ export function SetupForm() {
       selectedQuestions,
       selectedCodingTasks,
       reviewTemplate: selectedReviewTemplate,
-    });
+    };
+
+    if (onStart) {
+      onStart(config);
+    } else {
+      startSession(config);
+    }
   };
 
   const isStep2Valid = intervieweeName.trim().length > 0;
@@ -321,10 +334,10 @@ export function SetupForm() {
       <Card className="w-full max-w-3xl">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold bg-linear-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-            Interview Copilot
+            {title || "Interview Copilot"}
           </CardTitle>
           <CardDescription className="text-base">
-            Configure your technical interview session
+            {subtitle || "Configure your technical interview session"}
           </CardDescription>
         </CardHeader>
 

@@ -1,0 +1,8 @@
+{
+  "name": "interview-copilot",
+  "main": "party/index.ts",
+  "parties": {
+    "yjs": "party/yjs.ts"
+  },
+  "compatibilityDate": "2024-01-01"
+}
