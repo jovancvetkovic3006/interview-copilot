@@ -77,9 +77,73 @@ AI-powered technical interview assistant with a live code editor, intelligent in
 
 ## Deployment
 
-### Deploy PartyKit (free tier)
+This app has **two backends** that need to be deployed separately:
+
+- **Next.js app** → Vercel (handles UI + API routes that call Anthropic)
+- **PartyKit server** → PartyKit / Cloudflare Workers (handles realtime rooms, Yjs CRDT sync, and the take-home `pretask` party)
+
+You must deploy PartyKit **first** so you know its hostname before configuring Vercel.
+
+### 1. Deploy PartyKit
+
 ```bash
 npm run deploy:party
 ```
 
-This deploys the real-time server to Cloudflare's edge network. Update `NEXT_PUBLIC_PARTYKIT_HOST` in your `.env.local` with the deployed URL.
+The first run prompts a browser-based GitHub login. After deploy, the CLI prints the public hostname, for example:
+
+```
+Deployed interview-copilot to https://interview-copilot.<your-username>.partykit.dev
+```
+
+Save the bare hostname (no `https://`) — you'll set it as `NEXT_PUBLIC_PARTYKIT_HOST` on Vercel:
+
+```
+interview-copilot.<your-username>.partykit.dev
+```
+
+> Re-run `npm run deploy:party` whenever you change anything inside `party/` or `partykit.json`. New parties added to `partykit.json` only take effect after a redeploy.
+
+### 2. Deploy the Next.js app to Vercel
+
+The Vercel CLI ships as a dev dependency, so you don't need a global install. First-time setup needs an auth step:
+
+```bash
+npx vercel login          # browser-based, one-time
+npm run deploy:preview    # first run — links the local folder to a new Vercel project, deploys a preview
+npm run deploy            # promote to production (vercel --prod)
+```
+
+When prompted, accept the auto-detected Next.js framework settings. No `vercel.json` is needed.
+
+### 3. Set environment variables on Vercel
+
+In **Project → Settings → Environment Variables** (Production scope), add:
+
+| Name | Example value | Notes |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-…` | A **freshly rotated** key from console.anthropic.com. Server-only, never exposed to the browser. |
+| `NEXT_PUBLIC_PARTYKIT_HOST` | `interview-copilot.<your-username>.partykit.dev` | The hostname printed by `npm run deploy:party`. The `NEXT_PUBLIC_` prefix is required so the browser can reach the realtime server. |
+
+After adding them, **redeploy** so the build picks them up: `npm run deploy` again, or click "Redeploy" in the dashboard.
+
+### Verify
+
+1. Open the Vercel URL → `/interview` → "Start New Interview" → you land on `/interview/CODE`.
+2. Open the candidate link in another browser/incognito → both tabs should show each other in the participant list (PartyKit working).
+3. Type in the shared editor → text propagates live (Yjs over PartyKit working).
+4. Send a chat message → AI responds (Anthropic key working).
+5. From `/interview` → "Send a take-home task" → create one → submit from another tab → the manage page shows the submission (`pretask` party working).
+
+If any of those fail, check the browser console for `localhost:1999` references (means `NEXT_PUBLIC_PARTYKIT_HOST` wasn't set at build time) or 401/403s from `/api/chat` (means `ANTHROPIC_API_KEY` is missing/invalid).
+
+### Local dev after the env var changes
+
+Keep `.env.local` pointing at the local PartyKit dev server:
+
+```
+ANTHROPIC_API_KEY=sk-ant-api03-…
+NEXT_PUBLIC_PARTYKIT_HOST=localhost:1999
+```
+
+`.env.local` is git-ignored and is **not** uploaded to Vercel — Vercel uses the env vars you set in its dashboard.

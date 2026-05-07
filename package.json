@@ -8,6 +8,8 @@
     "dev:all": "concurrently \"next dev\" \"npx partykit dev\"",
     "build": "next build",
     "start": "next start",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel",
     "deploy:party": "npx partykit deploy",
     "lint": "eslint"
   },
@@ -41,6 +43,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vercel": "^53.2.0"
   }
 }

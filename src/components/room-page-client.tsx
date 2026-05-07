@@ -536,6 +536,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const runReportGeneration = useCallback(async () => {
     setReportGenerating(true);
     try {
+      // Snapshot the live shared editor so the report sees the candidate's actual final code
+      // (not just the original starterCode in `codingTask`). May be empty if no task was ever
+      // assigned in this session — the API treats empty as "not applicable".
+      const finalCode = panelCodingEditorRef.current?.getSharedCode() ?? "";
+
       const res = await fetch("/api/interview-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -552,6 +557,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           transcriptAnalyses,
           config: roomConfig,
           codingTask,
+          finalCode,
         }),
       });
       const data = (await res.json()) as { error?: string; markdown?: string };

@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
       transcriptAnalyses,
       config,
       codingTask,
+      finalCode,
     } = body as {
       roomCode?: string;
       participants?: { name: string; role: string }[];
@@ -59,6 +60,8 @@ export async function POST(req: NextRequest) {
       transcriptAnalyses?: { summary: string; score: number; answerQuality: string; timestamp?: number }[];
       config?: Record<string, unknown>;
       codingTask?: unknown;
+      /** Snapshot of the live collaborative editor at end-of-interview. May be empty if no task was assigned. */
+      finalCode?: string;
     };
 
     const chatBlock = (messages ?? [])
@@ -78,6 +81,18 @@ export async function POST(req: NextRequest) {
     const configStr = truncate(JSON.stringify(config ?? {}, null, 2), 12_000);
     const codingStr = truncate(JSON.stringify(codingTask ?? null, null, 2), 8000);
 
+    // Coding task language is used as the fenced-code block hint for `finalCode` so the model
+    // (and any reader of the report) can syntax-reason about it. Falls back to "text".
+    const codingLang =
+      (codingTask && typeof codingTask === "object" && "language" in codingTask
+        ? String((codingTask as { language?: unknown }).language ?? "")
+        : "") || "text";
+
+    const finalCodeTrimmed = (finalCode ?? "").trim();
+    const finalCodeBlock = finalCodeTrimmed
+      ? `\`\`\`${codingLang}\n${truncate(finalCodeTrimmed, 30_000)}\n\`\`\``
+      : "(no in-room coding task code captured — either no task was assigned, or the candidate left the editor empty)";
+
     const userContent = `You are writing the official post-interview packet for the hiring panel.
 
 Room code: ${roomCode || "(unknown)"}
@@ -88,8 +103,11 @@ ${participantsBlock || "(none)"}
 INTERVIEW CONFIG (JSON):
 ${configStr}
 
-CODING TASK METADATA (assigned task; final editor code may not be captured):
+CODING TASK METADATA (the assigned task definition):
 ${codingStr}
+
+FINAL CODE FROM THE SHARED IN-ROOM EDITOR (the candidate's actual code at end-of-interview, including any edits made to a pre-loaded take-home submission):
+${finalCodeBlock}
 
 FULL TYPED CHAT + AGENT (most recent last, truncated if huge):
 ${truncate(chatBlock, 70_000)}
@@ -105,7 +123,7 @@ Write a structured **Markdown** report suitable for PDF export. Include:
 2. Executive summary (5–8 bullets)
 3. Strengths observed (with evidence from chat or transcript)
 4. Gaps / risks / follow-up questions
-5. Coding / system design signal (from what was discussed and task metadata)
+5. Coding / system design signal — read the FINAL CODE block above (if present) and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript may show their reasoning). Quote short snippets when calling out specific issues.
 6. Recommended decision hint (hire / no-hire / more rounds) — phrased as guidance for humans, not a command
 7. Optional: timeline table if useful
 
