@@ -40,7 +40,7 @@ export function InterviewReviewPanel({ roomCode, report, generating, role, onRet
             <div>
               <CardTitle className="text-2xl">Interview complete</CardTitle>
               <CardDescription className="mt-1">
-                Room <span className="font-mono font-semibold text-blue-600">{roomCode}</span>
+                Code <span className="font-mono font-semibold text-blue-600">{roomCode}</span>
                 {report && (
                   <span className="block text-xs mt-1 text-zinc-500">
                     Generated {new Date(report.generatedAt).toLocaleString()}
@@ -78,7 +78,7 @@ export function InterviewReviewPanel({ roomCode, report, generating, role, onRet
           {!report && !generating && role === "interviewer" && (
             <div className="space-y-3 mb-4">
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                No summary is stored for this room yet (for example after a refresh before generation finished).
+                No summary is stored for this interview yet (for example after a refresh before generation finished).
               </p>
               {onRetryReport && (
                 <Button type="button" variant="secondary" size="sm" onClick={onRetryReport}>

@@ -569,7 +569,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     if (!isHost) return;
     if (
       !window.confirm(
-        "End the interview for everyone in this room and generate an AI summary? Participants will move to the final summary page."
+        "End the interview for everyone and generate an AI summary? Participants will move to the final summary page."
       )
     ) {
       return;
@@ -587,9 +587,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Join Interview Room</CardTitle>
+            <CardTitle className="text-2xl font-bold">Join Interview</CardTitle>
             <CardDescription>
-              Room: <span className="font-mono font-bold text-blue-600">{roomCode}</span>
+              Code: <span className="font-mono font-bold text-blue-600">{roomCode}</span>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -617,7 +617,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               )}
 
               <Button type="submit" className="w-full" disabled={!name.trim()}>
-                Join room
+                Join interview
               </Button>
             </form>
           </CardContent>
@@ -633,24 +633,24 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       return (
         <SetupForm
           onStart={handleSetupComplete}
-          title="Room Setup"
-          subtitle={`Configure the interview · Room: ${roomCode}`}
+          title="Interview Setup"
+          subtitle={`Configure the interview · Code: ${roomCode}`}
         />
       );
     }
 
     const waitingMessage =
       participant?.role === "interviewer"
-        ? "Another interviewer joined first and is configuring this room. You'll move to the interview as soon as they start."
+        ? "Another interviewer joined first and is configuring this interview. You'll move to the interview as soon as they start."
         : "Waiting for the interviewer to configure and start the session...";
 
     return (
       <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Waiting Room</CardTitle>
+            <CardTitle className="text-2xl font-bold">Waiting to start</CardTitle>
             <CardDescription>
-              Room: <span className="font-mono font-bold text-blue-600">{roomCode}</span>
+              Code: <span className="font-mono font-bold text-blue-600">{roomCode}</span>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -781,7 +781,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 <Mic className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`} />
                 <span className="text-xs font-medium">Live transcript</span>
                 {isRecording && <span className="text-[10px] text-red-500">● REC</span>}
-                <span className="text-[10px] text-zinc-500 ml-auto">Room</span>
+                <span className="text-[10px] text-zinc-500 ml-auto">Shared</span>
               </div>
               <div className="flex-1 min-h-[72px] max-h-[32vh] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
                 {transcript.length === 0 && !interimText ? (
@@ -1043,7 +1043,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               <Mic className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`} />
               <span className="text-xs font-medium">Live transcript</span>
               {isRecording && <span className="text-[10px] text-red-500">● REC</span>}
-              <span className="text-[10px] text-zinc-500 ml-auto">Room</span>
+              <span className="text-[10px] text-zinc-500 ml-auto">Shared</span>
             </div>
             <div className="flex-1 min-h-[72px] max-h-[26vh] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
               {transcript.length === 0 && !interimText ? (
