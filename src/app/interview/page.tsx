@@ -15,19 +15,20 @@ function generateRoomCode() {
   return code;
 }
 
-export default function RoomLobbyPage() {
+export default function InterviewLobbyPage() {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState("");
 
   const handleCreate = () => {
     const code = generateRoomCode();
-    router.push(`/room/${code}?creator=1`);
+    router.push(`/interview/${code}`);
   };
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     if (joinCode.trim()) {
-      router.push(`/room/${joinCode.trim().toUpperCase()}`);
+      // Manual code entry routes through `/invite/CODE` so candidates never see a role label.
+      router.push(`/invite/${joinCode.trim().toUpperCase()}`);
     }
   };
 
@@ -40,18 +41,17 @@ export default function RoomLobbyPage() {
           </div>
           <CardTitle className="text-2xl font-bold">Collaborative Interview</CardTitle>
           <CardDescription>
-            Create a room or join an existing one to collaborate in real-time
+            Start a new interview or join an existing one to collaborate in real-time
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Create Room */}
           <div>
             <Button onClick={handleCreate} className="w-full" size="lg">
-              Create New Room
+              Start New Interview
               <ArrowRight className="h-4 w-4" />
             </Button>
             <p className="text-xs text-zinc-500 text-center mt-1.5">
-              Generates a shareable room code
+              Generates a shareable interview code
             </p>
           </div>
 
@@ -64,10 +64,9 @@ export default function RoomLobbyPage() {
             </div>
           </div>
 
-          {/* Join Room */}
           <form onSubmit={handleJoin} className="space-y-3">
             <div>
-              <label className="block text-sm font-medium mb-1.5">Room Code</label>
+              <label className="block text-sm font-medium mb-1.5">Interview Code</label>
               <input
                 type="text"
                 value={joinCode}
@@ -78,8 +77,11 @@ export default function RoomLobbyPage() {
               />
             </div>
             <Button type="submit" variant="outline" className="w-full" disabled={joinCode.trim().length < 4}>
-              Join Existing Room
+              Join as candidate
             </Button>
+            <p className="text-[11px] text-zinc-500 text-center">
+              Not the candidate? Open the link your host sent you.
+            </p>
           </form>
         </CardContent>
       </Card>

@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect, memo } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { usePartyRoom } from "@/hooks/use-party-room";
 import { useSpeechTranscription } from "@/hooks/use-speech-transcription";
 import type { Participant } from "@/types/room";
@@ -11,7 +10,7 @@ import { PREDEFINED_QUESTIONS, CODING_TASK_PRESETS } from "@/data/presets";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CollaborativeEditor } from "@/components/collaborative-editor";
+import { CollaborativeEditor, type CollaborativeEditorHandle } from "@/components/collaborative-editor";
 import { SetupForm } from "@/components/setup-form";
 import { InterviewReviewPanel } from "@/components/interview-review";
 import {
@@ -33,13 +32,8 @@ import {
   StopCircle,
 } from "lucide-react";
 
-const MemoCollaborativeEditor = memo(CollaborativeEditor);
-
-/** Wait after new transcript/chat before calling analyze API (ms). Lower = snappier; too low = more duplicate calls mid-sentence. */
 const TRANSCRIPT_ANALYSIS_DEBOUNCE_MS = 4000;
-/** Min characters in the new-transcript window before calling the API (route requires ≥20). */
 const TRANSCRIPT_ANALYSIS_MIN_CHARS = 28;
-/** Arm analysis when this much new speech exists, or when there are enough new lines (below). */
 const TRANSCRIPT_ANALYSIS_GATE_CHARS = 40;
 const TRANSCRIPT_ANALYSIS_GATE_LINES = 2;
 
@@ -47,32 +41,67 @@ function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
+const PARTICIPANT_ID_STORAGE_PREFIX = "interview-copilot:participant:";
+
+/** Stable id per browser tab session for this room + role so refresh/reconnect does not duplicate roster entries. */
+function getOrCreateParticipantId(roomCode: string, role: Participant["role"]): string {
+  const key = `${PARTICIPANT_ID_STORAGE_PREFIX}${roomCode}:${role}`;
+  try {
+    const existing = sessionStorage.getItem(key);
+    if (existing && existing.length >= 6 && existing.length <= 48) return existing;
+  } catch {
+    /* private mode / SSR */
+  }
+  const id = generateId();
+  try {
+    sessionStorage.setItem(key, id);
+  } catch {
+    /* ignore */
+  }
+  return id;
+}
+
+/** Build invite URL: interviewer link is role-aware, candidate link is neutral. */
+function buildRoomInviteUrl(roomCode: string, role: Participant["role"]): string {
+  if (typeof window === "undefined") return "";
+  const base = window.location.origin;
+  if (role === "interviewer") return `${base}/interview/${roomCode}`;
+  return `${base}/invite/${roomCode}`;
+}
+
+function inviteRoleLabel(role: Participant["role"]): string {
+  if (role === "interviewer") return "Interviewer (host)";
+  return "Candidate";
+}
+
 type Step = "join" | "setup" | "interview" | "review";
+type InviteCopyKind = "candidate" | "interviewer";
 
-export default function RoomPage() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const roomCode = params.code as string;
-  const isCreator = searchParams.get("creator") === "1";
+export interface RoomPageClientProps {
+  /** Room code from the URL (case-normalized to uppercase by the page wrapper). */
+  roomCode: string;
+  /** Role derived from the route: `/interview/CODE` → interviewer, `/invite/CODE` → candidate. */
+  inviteRole: Participant["role"];
+}
 
-  // Local step state machine: join → setup → interview
+export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const [step, setStep] = useState<Step>("join");
 
   const [name, setName] = useState("");
-  const [role, setRole] = useState<Participant["role"]>(isCreator ? "interviewer" : "interviewee");
-  const [copied, setCopied] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState<InviteCopyKind | null>(null);
+  const [inviteDropdownOpen, setInviteDropdownOpen] = useState(false);
+  const inviteDropdownRef = useRef<HTMLDivElement>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
   const [showTasksPanel, setShowTasksPanel] = useState(true);
   const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | null>("questions");
   const [reportGenerating, setReportGenerating] = useState(false);
-  const idRef = useRef(generateId());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const greetingSentRef = useRef(false);
 
-  // Interview config (set by SetupForm during setup step)
-  const [roomConfig, setRoomConfig] = useState<InterviewConfig | null>(null);
+  /** Shared panel editor (interviewer view) — read Yjs text for AI code review. */
+  const panelCodingEditorRef = useRef<CollaborativeEditorHandle>(null);
 
   const {
     connected,
@@ -81,7 +110,9 @@ export default function RoomPage() {
     transcript,
     transcriptAnalyses,
     phase,
+    config: sharedConfig,
     codingTask,
+    hostParticipantId,
     sendChat,
     sendAgentResponse,
     sendTranscript,
@@ -92,6 +123,64 @@ export default function RoomPage() {
     interviewReport,
     sendInterviewReport,
   } = usePartyRoom(step !== "join" ? roomCode : null, participant);
+
+  /** This client is the designated host (only host runs the SetupForm and "End interview"). */
+  const isHost =
+    participant?.role === "interviewer" &&
+    !!hostParticipantId &&
+    hostParticipantId === participant.id;
+
+  /**
+   * Derived interview config. `sendConfig` already updates `sharedConfig` synchronously for the host,
+   * and PartyKit broadcasts it to other interviewers — so deriving avoids a redundant local mirror.
+   */
+  const roomConfig = (sharedConfig as InterviewConfig | null) ?? null;
+
+  const resolveAgentApiConfig = useCallback(
+    (cfg: InterviewConfig | null) => {
+      const candidateName =
+        cfg?.candidateName ||
+        participants.find((p) => p.role === "candidate")?.name ||
+        participant?.name ||
+        "Candidate";
+      return {
+        role: cfg?.role || "Software Developer",
+        difficulty: cfg?.difficulty || "mid",
+        topics: cfg?.topics?.length ? cfg.topics : ["general"],
+        candidateName,
+        ...(cfg?.agentInstructions?.trim() ? { agentInstructions: cfg.agentInstructions } : {}),
+        ...(cfg?.uploadedFiles?.length
+          ? { uploadedFiles: cfg.uploadedFiles.map((f) => ({ name: f.name, type: f.type, text: f.text })) }
+          : {}),
+        ...(cfg?.notes?.trim() ? { notes: cfg.notes } : {}),
+        ...(cfg?.preInterviewTask
+          ? {
+              preInterviewTask: {
+                title: cfg.preInterviewTask.title,
+                description: cfg.preInterviewTask.description,
+                language: cfg.preInterviewTask.language,
+                starterCode: cfg.preInterviewTask.starterCode,
+                ...(cfg.preInterviewTask.submittedCode ? { submittedCode: cfg.preInterviewTask.submittedCode } : {}),
+              },
+            }
+          : {}),
+        ...(cfg?.selectedQuestions?.length
+          ? { selectedQuestions: cfg.selectedQuestions.map((q) => ({ question: q.question, category: q.category })) }
+          : {}),
+        ...(cfg?.selectedCodingTasks?.length
+          ? {
+              selectedCodingTasks: cfg.selectedCodingTasks.map((t) => ({
+                title: t.title,
+                description: t.description,
+                starterCode: t.starterCode,
+                language: t.language,
+              })),
+            }
+          : {}),
+      };
+    },
+    [participants, participant?.name]
+  );
 
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const lastAnalyzedTranscriptLenRef = useRef(0);
@@ -109,12 +198,21 @@ export default function RoomPage() {
     lastAnalyzedTranscriptLenRef.current = 0;
   }, [roomCode]);
 
-  // Auto-scroll chat to bottom when new messages arrive or agent typing changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, agentTyping]);
 
-  // Derive the active step: PartyKit phase wins for interview/review; skip setup when interview already started.
+  useEffect(() => {
+    if (!inviteDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const el = inviteDropdownRef.current;
+      if (el && !el.contains(e.target as Node)) setInviteDropdownOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [inviteDropdownOpen]);
+
+  // PartyKit phase wins for interview/review; skip setup when interview already started.
   const activeStep: Step =
     phase === "review"
       ? "review"
@@ -122,11 +220,11 @@ export default function RoomPage() {
         ? "interview"
         : step;
 
-  // Background speech analysis: only the interviewer tab triggers the API (avoids duplicate calls per observer).
-  // Observers still receive `transcript-analysis` over PartyKit and see the same panel.
+  // Background speech analysis: only the designated host triggers the API (avoids duplicate calls per interviewer).
+  // Other interviewers still receive `transcript-analysis` over PartyKit and see the same panel.
   useEffect(() => {
     if (activeStep !== "interview") return;
-    if (!participant || participant.role !== "interviewer") return;
+    if (!participant || !isHost) return;
 
     const current = transcriptLiveRef.current;
     const startIdx = lastAnalyzedTranscriptLenRef.current;
@@ -173,9 +271,9 @@ export default function RoomPage() {
             role: cfg?.role,
             difficulty: cfg?.difficulty,
             topics: cfg?.topics,
-            intervieweeName:
-              cfg?.intervieweeName ||
-              participants.find((p) => p.role === "interviewee")?.name,
+            candidateName:
+              cfg?.candidateName ||
+              participants.find((p) => p.role === "candidate")?.name,
           }),
         });
         const data = (await res.json()) as {
@@ -214,7 +312,7 @@ export default function RoomPage() {
     return () => {
       if (analyzeDebounceRef.current) clearTimeout(analyzeDebounceRef.current);
     };
-  }, [transcript, messages, roomConfig, participants, activeStep, participant, sendTranscriptAnalysis]);
+  }, [transcript, messages, roomConfig, participants, activeStep, participant, isHost, sendTranscriptAnalysis]);
 
   const handleTranscriptSegment = useCallback((text: string) => {
     if (participant) {
@@ -235,29 +333,30 @@ export default function RoomPage() {
     e.preventDefault();
     if (name.trim()) {
       setParticipant({
-        id: idRef.current,
+        id: getOrCreateParticipantId(roomCode, inviteRole),
         name: name.trim(),
-        role,
+        role: inviteRole,
         joinedAt: Date.now(),
       });
       setStep("setup");
     }
   };
 
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}/room/${roomCode}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const copyRoomInvite = useCallback(
+    (kind: InviteCopyKind) => {
+      const role: Participant["role"] = kind === "candidate" ? "candidate" : "interviewer";
+      void navigator.clipboard.writeText(buildRoomInviteUrl(roomCode, role));
+      setInviteCopied(kind);
+      setTimeout(() => setInviteCopied(null), 2000);
+    },
+    [roomCode]
+  );
 
   const handleSetupComplete = async (config: InterviewConfig) => {
-    setRoomConfig(config);
     sendConfig(config);
     sendPhase("interview");
     setStep("interview");
 
-    // Send AI greeting message
     if (!greetingSentRef.current) {
       greetingSentRef.current = true;
       try {
@@ -266,16 +365,8 @@ export default function RoomPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: [{ role: "interviewee", content: "[Interview session started. Please introduce yourself and begin the interview.]" }],
-            config: {
-              role: config.role,
-              difficulty: config.difficulty,
-              topics: config.topics,
-              intervieweeName: config.intervieweeName || participants.find((p) => p.role === "interviewee")?.name || "Candidate",
-              agentInstructions: config.agentInstructions,
-              selectedQuestions: config.selectedQuestions,
-              selectedCodingTasks: config.selectedCodingTasks,
-            },
+            messages: [{ role: "candidate", content: "[Interview session started. Please introduce yourself and begin the interview.]" }],
+            config: resolveAgentApiConfig(config),
           }),
         });
         const text = await res.text();
@@ -305,41 +396,94 @@ export default function RoomPage() {
     sendChat(msg);
     setChatInput("");
 
-    // Forward to AI agent (both interviewer and interviewee can chat with the agent)
-    if (participant.role === "interviewer" || participant.role === "interviewee") {
-      setAgentTyping(true);
-      try {
-        const cfg = roomConfig;
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [...messages, msg].map((m) => ({
-              role: m.role === "agent" ? "agent" : "interviewee",
-              content: m.content,
-            })),
-            config: {
-              role: cfg?.role || "Software Developer",
-              difficulty: cfg?.difficulty || "mid",
-              topics: cfg?.topics || ["general"],
-              intervieweeName: cfg?.intervieweeName || participants.find((p) => p.role === "interviewee")?.name || participant.name || "Candidate",
-            },
-          }),
-        });
-        const text = await res.text();
-        if (text) {
-          const data = JSON.parse(text);
-          if (data.content) {
-            sendAgentResponse(data.content);
-          }
+    // Both interviewer and candidate can chat with the agent.
+    setAgentTyping(true);
+    try {
+      const cfg = roomConfig;
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, msg].map((m) => ({
+            role: m.role === "agent" ? "agent" : "candidate",
+            content: m.content,
+          })),
+          config: resolveAgentApiConfig(cfg),
+        }),
+      });
+      const text = await res.text();
+      if (text) {
+        const data = JSON.parse(text);
+        if (data.content) {
+          sendAgentResponse(data.content);
         }
-      } catch (err) {
-        console.error("Agent error:", err);
-      } finally {
-        setAgentTyping(false);
       }
+    } catch (err) {
+      console.error("Agent error:", err);
+    } finally {
+      setAgentTyping(false);
     }
   };
+
+  const handleSubmitCodingForReview = useCallback(async () => {
+    if (!participant || participant.role !== "interviewer") return;
+    if (phase !== "interview") return;
+    const task = codingTask as { title?: string; description?: string; language?: string } | null;
+    if (!task?.title) return;
+
+    const code = panelCodingEditorRef.current?.getSharedCode() ?? "";
+    if (!code.trim()) return;
+
+    const msg = {
+      id: `msg-${Date.now()}`,
+      role: "user" as const,
+      content: `Requested AI review of the candidate's current solution for the coding task "${task.title}".`,
+      senderName: participant.name,
+      timestamp: Date.now(),
+    };
+    sendChat(msg);
+    setAgentTyping(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, msg].map((m) => ({
+            role: m.role === "agent" ? "agent" : "candidate",
+            content: m.content,
+          })),
+          config: resolveAgentApiConfig(roomConfig),
+          codingTaskSubmission: {
+            title: task.title,
+            description: task.description ?? "",
+            language: task.language ?? "javascript",
+            code,
+            requestedBy: "interviewer" as const,
+          },
+        }),
+      });
+      const text = await res.text();
+      if (text) {
+        const data = JSON.parse(text);
+        if (data.content) {
+          sendAgentResponse(data.content);
+        }
+      }
+    } catch (err) {
+      console.error("Coding review agent error:", err);
+    } finally {
+      setAgentTyping(false);
+    }
+  }, [
+    participant,
+    phase,
+    codingTask,
+    messages,
+    roomConfig,
+    sendChat,
+    sendAgentResponse,
+    resolveAgentApiConfig,
+  ]);
 
   const handleChatKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -348,7 +492,6 @@ export default function RoomPage() {
     }
   };
 
-  // Helper: get available questions for the configured role
   const configuredRole = roomConfig?.role || "Frontend Developer";
   const availableQuestions: PredefinedQuestion[] = PREDEFINED_QUESTIONS[configuredRole] || [];
   const availableTasks: CodingTaskPreset[] = [
@@ -423,7 +566,7 @@ export default function RoomPage() {
   ]);
 
   const handleEndInterview = useCallback(async () => {
-    if (participant?.role !== "interviewer") return;
+    if (!isHost) return;
     if (
       !window.confirm(
         "End the interview for everyone in this room and generate an AI summary? Participants will move to the final summary page."
@@ -436,7 +579,7 @@ export default function RoomPage() {
     setStep("review");
     if (interviewReport) return;
     await runReportGeneration();
-  }, [participant, sendPhase, interviewReport, runReportGeneration, isRecording, stopRecording]);
+  }, [isHost, sendPhase, interviewReport, runReportGeneration, isRecording, stopRecording]);
 
   // ─── Step 1: Join ──────────────────────────────────────────────
   if (activeStep === "join") {
@@ -463,28 +606,18 @@ export default function RoomPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Your Role</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["interviewer", "interviewee", "observer"] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRole(r)}
-                      className={`p-2.5 rounded-lg border text-sm font-medium capitalize transition-all cursor-pointer ${
-                        role === r
-                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500"
-                          : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400"
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
+              {/* Hide role label entirely from candidates so they aren't aware of the role concept. */}
+              {inviteRole !== "candidate" && (
+                <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-3 py-2.5">
+                  <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">You&apos;re joining as</p>
+                  <Badge variant="secondary" className="text-xs capitalize">
+                    {inviteRoleLabel(inviteRole)}
+                  </Badge>
                 </div>
-              </div>
+              )}
 
               <Button type="submit" className="w-full" disabled={!name.trim()}>
-                Join Room
+                Join room
               </Button>
             </form>
           </CardContent>
@@ -495,8 +628,8 @@ export default function RoomPage() {
 
   // ─── Step 2: Setup / Waiting Room ──────────────────────────────
   if (activeStep === "setup") {
-    // Interviewer sees the full setup form
-    if (participant?.role === "interviewer") {
+    // Only the elected host configures. Other interviewers wait until config arrives.
+    if (isHost) {
       return (
         <SetupForm
           onStart={handleSetupComplete}
@@ -506,7 +639,11 @@ export default function RoomPage() {
       );
     }
 
-    // Non-interviewers see a waiting room
+    const waitingMessage =
+      participant?.role === "interviewer"
+        ? "Another interviewer joined first and is configuring this room. You'll move to the interview as soon as they start."
+        : "Waiting for the interviewer to configure and start the session...";
+
     return (
       <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -514,9 +651,6 @@ export default function RoomPage() {
             <CardTitle className="text-2xl font-bold">Waiting Room</CardTitle>
             <CardDescription>
               Room: <span className="font-mono font-bold text-blue-600">{roomCode}</span>
-              <Button variant="ghost" size="sm" onClick={handleCopyLink} className="ml-2">
-                {copied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
-              </Button>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -539,12 +673,11 @@ export default function RoomPage() {
                       className={`text-xs capitalize ${
                         p.role === "interviewer"
                           ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
-                          : p.role === "interviewee"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                            : ""
+                          : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
                       }`}
                     >
                       {p.role}
+                      {hostParticipantId === p.id && " · host"}
                     </Badge>
                   </div>
                 ))}
@@ -555,7 +688,7 @@ export default function RoomPage() {
             </div>
             <div className="text-center py-6 border-t border-zinc-200 dark:border-zinc-800">
               <Clock className="h-8 w-8 mx-auto mb-2 text-zinc-400 animate-pulse" />
-              <p className="text-sm text-zinc-500">Waiting for the interviewer to configure and start the session...</p>
+              <p className="text-sm text-zinc-500">{waitingMessage}</p>
             </div>
           </CardContent>
         </Card>
@@ -563,21 +696,17 @@ export default function RoomPage() {
     );
   }
 
-  // ─── Step: Review (summary + PDF) — interview panel only; interviewee sees a simple ended screen ──
+  // ─── Step: Review ─ interviewer panel; candidate sees a thank-you page ──
   if (activeStep === "review") {
-    if (participant?.role === "interviewee") {
+    if (participant?.role === "candidate") {
       return (
         <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
           <Card className="w-full max-w-md">
-            <CardHeader className="text-center">
-              <CardTitle className="text-xl">Interview session ended</CardTitle>
-              <CardDescription className="text-left mt-2">
-                The interviewer has ended this session. Hiring notes and the AI summary are only visible to the interview
-                panel — you will not see scores or a written review here.
-              </CardDescription>
+            <CardHeader className="text-center pb-2">
+              <CardTitle className="text-xl">Thanks for participating</CardTitle>
             </CardHeader>
-            <CardContent className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-              Thank you for your time.
+            <CardContent className="text-center text-sm text-zinc-600 dark:text-zinc-400 pt-0">
+              <p>We appreciate you taking the time today.</p>
             </CardContent>
           </Card>
         </div>
@@ -588,19 +717,18 @@ export default function RoomPage() {
         roomCode={roomCode}
         report={interviewReport}
         generating={reportGenerating}
-        role={participant?.role ?? "observer"}
-        onRetryReport={participant?.role === "interviewer" ? runReportGeneration : undefined}
+        role={participant?.role ?? "interviewer"}
+        onRetryReport={isHost ? runReportGeneration : undefined}
       />
     );
   }
 
   // ─── Step 3: Interview Room ────────────────────────────────────
 
-  // ── Interviewee view: chat + code editor ──
-  if (participant?.role === "interviewee") {
+  // ── Candidate view: chat + code editor ──
+  if (participant?.role === "candidate") {
     return (
       <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
-        {/* Top bar */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
           <div className="flex items-center gap-3">
             <span className="font-mono text-sm font-bold text-blue-600">{roomCode}</span>
@@ -646,9 +774,7 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {/* Main content: chat + code editor */}
         <div className="flex-1 flex overflow-hidden min-h-0">
-          {/* Left: session transcript + chat */}
           <div className="w-80 min-w-72 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0">
             <div className="flex-none flex flex-col border-b border-zinc-200 dark:border-zinc-800 max-h-[36vh] min-h-[128px] shrink-0 bg-zinc-50/80 dark:bg-zinc-900/40">
               <div className="px-3 py-2 flex items-center gap-1.5 border-b border-zinc-200/80 dark:border-zinc-800 shrink-0">
@@ -689,9 +815,7 @@ export default function RoomPage() {
                   messages.map((msg) => (
                     <div
                       key={msg.id}
-                      className={`flex flex-col ${
-                        msg.role === "agent" ? "items-start" : "items-end"
-                      }`}
+                      className={`flex flex-col ${msg.role === "agent" ? "items-start" : "items-end"}`}
                     >
                       <div className="text-xs text-zinc-500 mb-0.5">{msg.senderName}</div>
                       <div
@@ -736,10 +860,10 @@ export default function RoomPage() {
           </div>
 
           <div className="flex-1 flex flex-col min-h-0">
-            <MemoCollaborativeEditor
+            <CollaborativeEditor
               roomId={roomCode}
               participantName={participant?.name || "Anonymous"}
-              participantRole={participant?.role || "observer"}
+              participantRole="candidate"
               language={(codingTask as { language?: string })?.language || "javascript"}
               taskTitle={(codingTask as { title?: string })?.title}
               taskDescription={(codingTask as { description?: string })?.description}
@@ -751,17 +875,74 @@ export default function RoomPage() {
     );
   }
 
-  // ── Interviewer / Observer view ──
+  // ── Interviewer view ──
   return (
     <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm font-bold text-blue-600">{roomCode}</span>
-          <Button variant="ghost" size="sm" onClick={handleCopyLink} title="Copy room link">
-            {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-          </Button>
+          {phase === "interview" && (
+            <div className="relative border-l border-zinc-200 dark:border-zinc-700 pl-3 ml-1" ref={inviteDropdownRef}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 px-2.5 text-xs font-medium"
+                onClick={() => setInviteDropdownOpen((o) => !o)}
+                aria-expanded={inviteDropdownOpen}
+                aria-haspopup="menu"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Invite links
+                <ChevronDown className={`h-3.5 w-3.5 opacity-70 transition-transform ${inviteDropdownOpen ? "rotate-180" : ""}`} />
+              </Button>
+              {inviteDropdownOpen && (
+                <div
+                  role="menu"
+                  className="absolute left-0 top-[calc(100%+6px)] z-50 min-w-[12.5rem] rounded-md border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-950"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                    onClick={() => {
+                      copyRoomInvite("candidate");
+                      setInviteDropdownOpen(false);
+                    }}
+                  >
+                    {inviteCopied === "candidate" ? (
+                      <Check className="h-4 w-4 shrink-0 text-green-600" />
+                    ) : (
+                      <span className="w-4 shrink-0" />
+                    )}
+                    Candidate link
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                    onClick={() => {
+                      copyRoomInvite("interviewer");
+                      setInviteDropdownOpen(false);
+                    }}
+                  >
+                    {inviteCopied === "interviewer" ? (
+                      <Check className="h-4 w-4 shrink-0 text-green-600" />
+                    ) : (
+                      <span className="w-4 shrink-0" />
+                    )}
+                    Interviewer link
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <Badge variant="secondary" className="text-xs capitalize">{phase}</Badge>
+          {isHost && (
+            <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+              Host
+            </Badge>
+          )}
           {connected ? (
             <span className="flex items-center gap-1 text-xs text-green-600">
               <Wifi className="h-3 w-3" /> Connected
@@ -778,13 +959,9 @@ export default function RoomPage() {
             {participants.map((p) => (
               <div
                 key={p.id}
-                title={`${p.name} (${p.role})`}
+                title={`${p.name} (${p.role}${hostParticipantId === p.id ? " · host" : ""})`}
                 className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-zinc-950 ${
-                  p.role === "interviewer"
-                    ? "bg-purple-500"
-                    : p.role === "interviewee"
-                      ? "bg-blue-500"
-                      : "bg-zinc-400"
+                  p.role === "interviewer" ? "bg-purple-500" : "bg-blue-500"
                 }`}
               >
                 {p.name[0]?.toUpperCase()}
@@ -795,18 +972,30 @@ export default function RoomPage() {
             <Users className="h-3.5 w-3.5" />
             <span className="text-xs font-medium">{participants.length}</span>
           </div>
-          {participant?.role === "interviewer" && (
+          <Button
+            variant={showTasksPanel ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowTasksPanel(!showTasksPanel)}
+            title="Toggle questions & tasks panel"
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+            Q&A
+          </Button>
+          {phase === "interview" && (codingTask as { title?: string } | null)?.title && (
             <Button
-              variant={showTasksPanel ? "default" : "outline"}
+              type="button"
+              variant="outline"
               size="sm"
-              onClick={() => setShowTasksPanel(!showTasksPanel)}
-              title="Toggle questions & tasks panel"
+              className="border-violet-300 text-violet-800 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-violet-950/50"
+              onClick={handleSubmitCodingForReview}
+              disabled={agentTyping}
+              title="Send the shared editor (candidate's current work) to the AI for feedback"
             >
-              <ListChecks className="h-3.5 w-3.5" />
-              Q&A
+              <Sparkles className="h-3.5 w-3.5" />
+              Review candidate code
             </Button>
           )}
-          {participant?.role === "interviewer" && phase === "interview" && (
+          {isHost && phase === "interview" && (
             <Button
               type="button"
               variant="outline"
@@ -820,7 +1009,7 @@ export default function RoomPage() {
               End interview
             </Button>
           )}
-          {speechSupported && participant?.role !== "observer" && (
+          {speechSupported && (
             <div className="flex flex-col items-end gap-0.5">
               <Button
                 type="button"
@@ -847,9 +1036,7 @@ export default function RoomPage() {
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Left: transcript + AI insights + chat (stable slots reduce layout jump when recording) */}
         <div className="w-95 min-w-80 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0">
           <div className="flex-none flex flex-col border-b border-zinc-200 dark:border-zinc-800 max-h-[30vh] min-h-[112px] shrink-0 bg-zinc-50/80 dark:bg-zinc-900/40">
             <div className="px-3 py-2 flex items-center gap-1.5 border-b border-zinc-200/80 dark:border-zinc-800 shrink-0">
@@ -882,7 +1069,7 @@ export default function RoomPage() {
             <div className="px-3 py-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 shrink-0 border-b border-violet-200/80 dark:border-violet-900/60">
               <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
               <span className="text-xs font-medium text-violet-900 dark:text-violet-100">Answer insights (speech)</span>
-              <span className="text-[10px] text-violet-700/80 dark:text-violet-300/80">Not shown to interviewee</span>
+              <span className="text-[10px] text-violet-700/80 dark:text-violet-300/80">Not shown to candidate</span>
               {analysisBusy && (
                 <span className="text-[10px] text-violet-600 dark:text-violet-400 ml-auto animate-pulse">Analyzing…</span>
               )}
@@ -890,7 +1077,7 @@ export default function RoomPage() {
             <div className="flex-1 min-h-[72px] max-h-[28vh] overflow-y-auto p-3 space-y-2">
               {transcriptAnalyses.length === 0 && !analysisBusy ? (
                 <p className="text-xs text-violet-800/75 dark:text-violet-200/75 italic leading-relaxed">
-                  When an interviewer records, recent speech is analyzed here (summary, score, answer quality) to help you steer the interview.
+                  When the host records, recent speech is analyzed here (summary, score, answer quality) to help you steer the interview.
                 </p>
               ) : (
                 transcriptAnalyses.slice(-8).map((a) => (
@@ -953,34 +1140,26 @@ export default function RoomPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {participant?.role !== "observer" && (
-              <div className="border-t border-zinc-200 dark:border-zinc-800 p-3 shrink-0">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={handleChatKeyDown}
-                    placeholder={
-                      participant?.role === "interviewer"
-                        ? "Type a message (sends to AI agent)..."
-                        : "Type a message..."
-                    }
-                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <Button size="sm" onClick={handleSendMessage} disabled={!chatInput.trim()}>
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
+            <div className="border-t border-zinc-200 dark:border-zinc-800 p-3 shrink-0">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={handleChatKeyDown}
+                  placeholder="Type a message (sends to AI agent)..."
+                  className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Button size="sm" onClick={handleSendMessage} disabled={!chatInput.trim()}>
+                  <Send className="h-4 w-4" />
+                </Button>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
-        {/* Middle: Questions & Tasks Panel (interviewer only, togglable) */}
-        {showTasksPanel && participant?.role === "interviewer" && (
+        {showTasksPanel && (
           <div className="w-75 min-w-65 flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-y-auto">
-            {/* Questions section */}
             <div className="border-b border-zinc-200 dark:border-zinc-800">
               <button
                 onClick={() => setExpandedSection(expandedSection === "questions" ? null : "questions")}
@@ -1019,7 +1198,6 @@ export default function RoomPage() {
               )}
             </div>
 
-            {/* Coding Tasks section */}
             <div>
               <button
                 onClick={() => setExpandedSection(expandedSection === "tasks" ? null : "tasks")}
@@ -1064,12 +1242,12 @@ export default function RoomPage() {
           </div>
         )}
 
-        {/* Right: Collaborative Code Editor */}
         <div className="flex-1 flex flex-col min-h-0">
-          <MemoCollaborativeEditor
+          <CollaborativeEditor
+            ref={panelCodingEditorRef}
             roomId={roomCode}
             participantName={participant?.name || "Anonymous"}
-            participantRole={participant?.role || "observer"}
+            participantRole="interviewer"
             language={(codingTask as { language?: string })?.language || "javascript"}
             taskTitle={(codingTask as { title?: string })?.title}
             taskDescription={(codingTask as { description?: string })?.description}

@@ -107,7 +107,7 @@ export function InterviewPage() {
           <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-700" />
           <div className="flex items-center gap-1.5 text-xs text-zinc-500">
             <User className="h-3 w-3" />
-            <span>{session.config.intervieweeName}</span>
+            <span>{session.config.candidateName}</span>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-zinc-500">
             <Briefcase className="h-3 w-3" />

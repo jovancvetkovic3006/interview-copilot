@@ -41,7 +41,7 @@ function buildSystemPrompt(config: {
   role: string;
   difficulty: string;
   topics: string[];
-  intervieweeName: string;
+  candidateName: string;
   agentInstructions?: string;
   uploadedFiles?: { name: string; type: string; text: string }[];
   notes?: string;
@@ -59,10 +59,19 @@ function buildSystemPrompt(config: {
     starterCode: string;
     language: string;
   }[];
+  /** Shared live-editor snapshot for AI feedback (may repeat while still on the same task). */
+  codingTaskSubmission?: {
+    title: string;
+    description: string;
+    language: string;
+    code: string;
+    /** Who triggered the review (default candidate for older clients). */
+    requestedBy?: "interviewer" | "candidate";
+  };
 }) {
   let prompt = `You are an expert technical interviewer conducting an interview for a ${config.difficulty}-level ${config.role} position.
 
-The interviewee's name is ${config.intervieweeName}.
+The candidate's name is ${config.candidateName}.
 
 Topics to cover: ${config.topics.join(", ")}.`;
 
@@ -126,6 +135,33 @@ CODING TASKS TO USE (assign these at appropriate moments using the [CODING_TASK]
 ${config.selectedCodingTasks.map((t) => `- ${t.title} (${t.language}): ${t.description}`).join("\n")}`;
   }
 
+  let codingReviewBehaviorHint = "";
+  if (config.codingTaskSubmission) {
+    const s = config.codingTaskSubmission;
+    const fromInterviewer = s.requestedBy === "interviewer";
+    prompt += `
+
+IN-ROOM CODING TASK — REVIEW REQUEST:
+${
+  fromInterviewer
+    ? "The human interviewer shared the candidate's current solution from the live shared editor and asked you to review it. They may send again as the candidate continues to edit."
+    : "The candidate asked you to review their current solution (they may submit again while still working on the same task)."
+}
+Task title: ${s.title}
+Language: ${s.language}
+Task description:
+${s.description}
+
+Their current shared-editor code:
+\`\`\`${s.language}
+${s.code}
+\`\`\``;
+    codingReviewBehaviorHint =
+      fromInterviewer
+        ? `- The interviewer asked you to evaluate the candidate's current in-room solution (see IN-ROOM CODING TASK above). Respond with concise, actionable feedback: what works, issues, complexity, tests/edge cases, and next steps. Address the candidate directly where appropriate. Stay conversational. Do not assign a new [CODING_TASK] unless the candidate has clearly finished this exercise and you are moving on.`
+        : `- The candidate just requested feedback on their in-room coding solution (see IN-ROOM CODING TASK above). Respond with concise, actionable feedback: what works, issues, complexity, tests/edge cases, and next steps. Stay conversational. Do not assign a new [CODING_TASK] unless they have clearly finished this exercise and you are moving on.`;
+  }
+
   prompt += `
 
 Your behavior:
@@ -140,11 +176,12 @@ Your behavior:
 - When appropriate, assign a coding task using the special format below
 - Evaluate responses and provide brief follow-up if needed
 - Keep track of the conversation flow naturally
+${codingReviewBehaviorHint}
 
 To assign a coding task, include it in your response using this EXACT JSON format on its own line:
 [CODING_TASK]{"title":"Task Title","description":"Detailed description of the task","starterCode":"// starter code here","language":"javascript"}[/CODING_TASK]
 
-After the interviewee submits code, review it and provide feedback.
+After code is submitted for review (by the candidate in chat, or by the interviewer using the review action), evaluate it and provide feedback.
 
 When the interview should end (after sufficient questions and at least one coding task), include this marker:
 [INTERVIEW_COMPLETE]
@@ -157,13 +194,32 @@ Remember to be conversational and natural. Do not number your questions.`;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, config, action } = body;
+    const { messages, config, action, codingTaskSubmission } = body;
 
     if (action === "generate-review") {
       return generateReview(body);
     }
 
-    const systemPrompt = buildSystemPrompt(config);
+    const submission =
+      codingTaskSubmission &&
+      typeof codingTaskSubmission.title === "string" &&
+      typeof codingTaskSubmission.code === "string"
+        ? {
+            title: codingTaskSubmission.title,
+            description: String(codingTaskSubmission.description ?? ""),
+            language: String(codingTaskSubmission.language ?? "javascript"),
+            code: codingTaskSubmission.code,
+            requestedBy:
+              codingTaskSubmission.requestedBy === "interviewer"
+                ? ("interviewer" as const)
+                : ("candidate" as const),
+          }
+        : undefined;
+
+    const systemPrompt = buildSystemPrompt({
+      ...config,
+      ...(submission ? { codingTaskSubmission: submission } : {}),
+    });
 
     const claudeMessages = messages.map((m: { role: string; content: string }) => ({
       role: m.role === "agent" ? ("assistant" as const) : ("user" as const),
@@ -175,7 +231,7 @@ export async function POST(req: NextRequest) {
       system: systemPrompt,
       messages: claudeMessages,
       temperature: 0.7,
-      max_tokens: 1500,
+      max_tokens: submission ? 2800 : 1500,
     });
 
     const responseContent = completion.content[0]?.type === "text" ? completion.content[0].text : "";
@@ -202,7 +258,7 @@ async function generateReview(body: {
     role: string;
     difficulty: string;
     topics: string[];
-    intervieweeName: string;
+    candidateName: string;
     reviewTemplate?: { categories: string[] };
   };
   codingTasks: { title: string; submittedCode?: string; description: string }[];
@@ -214,7 +270,7 @@ async function generateReview(body: {
   const conversationSummary = messages
     .map(
       (m: { role: string; content: string }) =>
-        `${m.role === "agent" ? "Interviewer" : config.intervieweeName}: ${m.content}`
+        `${m.role === "agent" ? "Interviewer" : config.candidateName}: ${m.content}`
     )
     .join("\n");
 
@@ -246,7 +302,7 @@ async function generateReview(body: {
     : "";
 
   const reviewPrompt = `You are reviewing a technical interview for a ${config.difficulty}-level ${config.role} position.
-Interviewee: ${config.intervieweeName}
+Candidate: ${config.candidateName}
 
 FULL CONVERSATION:
 ${conversationSummary}

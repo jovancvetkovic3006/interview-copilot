@@ -44,14 +44,14 @@ export async function POST(req: NextRequest) {
       role,
       difficulty,
       topics,
-      intervieweeName,
+      candidateName,
     } = body as {
       transcriptWindow: string;
       recentChat?: { speaker: string; content: string }[];
       role?: string;
       difficulty?: string;
       topics?: string[];
-      intervieweeName?: string;
+      candidateName?: string;
     };
 
     if (!transcriptWindow || typeof transcriptWindow !== "string" || transcriptWindow.trim().length < 20) {
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     const system = `You are an expert interview coach helping ONLY the hiring panel (not the candidate).
 You receive a short window of LIVE SPEECH TRANSCRIPT from a technical interview (may contain errors from speech-to-text).
 The interview is for a ${difficulty || "mid"} level ${role || "software"} role. Topics: ${(topics || ["general"]).join(", ")}.
-The primary candidate is named ${intervieweeName || "the candidate"}.
+The primary candidate is named ${candidateName || "the candidate"}.
 
 Your job:
 - Infer whether the candidate likely answered an interview question vs small talk / silence / interviewer-only.

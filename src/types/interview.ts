@@ -2,7 +2,7 @@ export type Difficulty = "junior" | "mid" | "senior" | "lead";
 
 export type InterviewPhase = "setup" | "in-progress" | "review";
 
-export type MessageRole = "agent" | "interviewee";
+export type MessageRole = "agent" | "candidate";
 
 export interface ChatMessage {
   id: string;
@@ -60,7 +60,7 @@ export interface ReviewTemplate {
 }
 
 export interface InterviewConfig {
-  intervieweeName: string;
+  candidateName: string;
   role: string;
   difficulty: Difficulty;
   topics: string[];

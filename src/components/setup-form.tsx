@@ -178,7 +178,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const [duration, setDuration] = useState(30);
 
   // Step 2: Candidate
-  const [intervieweeName, setIntervieweeName] = useState("");
+  const [candidateName, setCandidateName] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [candidateNotes, setCandidateNotes] = useState("");
@@ -278,7 +278,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   };
 
   const handleStart = () => {
-    if (!intervieweeName.trim()) return;
+    if (!candidateName.trim()) return;
 
     const preInterviewTask: PreInterviewTask | undefined =
       enablePreTask && preTaskTitle.trim()
@@ -292,7 +292,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
         : undefined;
 
     const config: InterviewConfig = {
-      intervieweeName: intervieweeName.trim(),
+      candidateName: candidateName.trim(),
       role: effectiveRole,
       difficulty,
       topics,
@@ -313,7 +313,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
     }
   };
 
-  const isStep2Valid = intervieweeName.trim().length > 0;
+  const isStep2Valid = candidateName.trim().length > 0;
   const canProceed = step === 1 ? isStep2Valid : true;
 
   const nextStep = () => {
@@ -498,8 +498,8 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                 <label className="text-sm font-medium">Candidate Name *</label>
                 <input
                   type="text"
-                  value={intervieweeName}
-                  onChange={(e) => setIntervieweeName(e.target.value)}
+                  value={candidateName}
+                  onChange={(e) => setCandidateName(e.target.value)}
                   placeholder="Enter candidate's name"
                   className="w-full h-10 px-3 rounded-lg border border-zinc-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
                 />

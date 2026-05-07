@@ -120,6 +120,7 @@ export function ChatPanel() {
       const { cleanContent, task } = parseCodingTask(data.content);
 
       if (data.content.includes("[INTERVIEW_COMPLETE]")) {
+        // (legacy single-user flow ends here — collaborative mode lives in room-page-client.tsx)
         const finalContent = cleanContent.replace("[INTERVIEW_COMPLETE]", "").trim();
         if (finalContent) addMessage("agent", finalContent);
         endSession();
@@ -149,8 +150,8 @@ export function ChatPanel() {
       hasInitializedRef.current = true;
       sendToAgent([
         {
-          role: "interviewee",
-          content: `Hi, I'm ${session.config.intervieweeName}. I'm here for the ${session.config.role} interview.`,
+          role: "candidate",
+          content: `Hi, I'm ${session.config.candidateName}. I'm here for the ${session.config.role} interview.`,
         },
       ]);
     }
@@ -160,12 +161,12 @@ export function ChatPanel() {
     if (!input.trim() || isAgentTyping || !session) return;
 
     const userMessage = input.trim();
-    addMessage("interviewee", userMessage);
+    addMessage("candidate", userMessage);
     setInput("");
 
     const allMessages = [
       ...session.messages.map((m) => ({ role: m.role, content: m.content })),
-      { role: "interviewee", content: userMessage },
+      { role: "candidate", content: userMessage },
     ];
 
     sendToAgent(allMessages);
@@ -242,7 +243,7 @@ export function ChatPanel() {
               value={noteInput}
               onChange={(e) => setNoteInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddNote()}
-              placeholder="Add a note about the interviewee..."
+              placeholder="Add a note about the candidate..."
               className="flex-1 h-8 px-3 rounded-md border border-amber-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-700 dark:bg-zinc-900"
             />
             <Button size="sm" variant="default" onClick={handleAddNote}>
@@ -257,7 +258,7 @@ export function ChatPanel() {
         {session.messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex gap-3 ${msg.role === "interviewee" ? "flex-row-reverse" : ""}`}
+            className={`flex gap-3 ${msg.role === "candidate" ? "flex-row-reverse" : ""}`}
           >
             <div
               className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${

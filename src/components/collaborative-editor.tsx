@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import * as Y from "yjs";
 // y-monaco and y-partykit/provider are imported dynamically in handleEditorMount
@@ -24,10 +24,15 @@ function destroyCollaborationOnce(target: object | null | undefined, destroy: ()
   }
 }
 
+export interface CollaborativeEditorHandle {
+  /** Full shared document text from Yjs (Monaco buffer), or empty string if not connected yet. */
+  getSharedCode: () => string;
+}
+
 interface CollaborativeEditorProps {
   roomId: string;
   participantName: string;
-  participantRole: "interviewer" | "interviewee" | "observer";
+  participantRole: "interviewer" | "candidate";
   language?: string;
   taskTitle?: string;
   taskDescription?: string;
@@ -91,7 +96,7 @@ function pickDesignatedSeederClientId(awareness: {
   const editorIds = entries
     .filter(([, s]) => {
       const r = s.user?.role;
-      return r === "interviewer" || r === "interviewee";
+      return r === "interviewer" || r === "candidate";
     })
     .map(([id]) => id)
     .sort((a, b) => a - b);
@@ -113,15 +118,19 @@ function codingTaskRoomSuffix(
   return (h >>> 0).toString(36);
 }
 
-export function CollaborativeEditor({
-  roomId,
-  participantName,
-  participantRole,
-  language = "javascript",
-  taskTitle,
-  taskDescription,
-  starterCode,
-}: CollaborativeEditorProps) {
+const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, CollaborativeEditorProps>(
+  function CollaborativeEditor(
+    {
+      roomId,
+      participantName,
+      participantRole,
+      language = "javascript",
+      taskTitle,
+      taskDescription,
+      starterCode,
+    },
+    ref
+  ) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<{ destroy(): void } | null>(null);
@@ -131,6 +140,22 @@ export function CollaborativeEditor({
   const awarenessUnsubRef = useRef<(() => void) | null>(null);
   const providerSyncUnsubRef = useRef<(() => void) | null>(null);
   const [connectedUsers, setConnectedUsers] = useState(0);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getSharedCode: () => {
+        const ydoc = ydocRef.current;
+        if (!ydoc) return "";
+        try {
+          return ydoc.getText("monaco").toString();
+        } catch {
+          return "";
+        }
+      },
+    }),
+    []
+  );
 
   const taskRoomSuffix = useMemo(() => {
     if (!taskTitle) return "";
@@ -219,7 +244,6 @@ export function CollaborativeEditor({
     // Seed only after Yjs has synced, and only from one designated client (see pickDesignatedSeederClientId).
     // Before sync, two browsers both see ytext.length === 0 and each inserts → duplicated task in the CRDT.
     const trySeedAfterSync = () => {
-      if (participantRole === "observer") return;
       if (!taskTitle || (!starterCode && !taskDescription)) return;
       const designated = pickDesignatedSeederClientId(awareness);
       if (designated === null || ydoc.clientID !== designated) return;
@@ -274,7 +298,8 @@ export function CollaborativeEditor({
     }
   };
 
-  const isReadOnly = participantRole === "observer";
+  // Both interviewer and candidate can edit the shared buffer; no read-only role anymore.
+  const isReadOnly = false;
 
   if (!taskTitle) {
     return (
@@ -339,13 +364,19 @@ export function CollaborativeEditor({
       </div>
     </div>
   );
-}
+  }
+);
+
+CollaborativeEditorInner.displayName = "CollaborativeEditor";
+
+/** Memoized editor with ref support for reading shared Yjs text (e.g. submit-for-review). */
+export const CollaborativeEditor = memo(CollaborativeEditorInner);
 
 function getColorForRole(role: string): string {
   switch (role) {
     case "interviewer":
       return "#a855f7";
-    case "interviewee":
+    case "candidate":
       return "#3b82f6";
     default:
       return "#6b7280";
@@ -356,7 +387,7 @@ function getColorLightForRole(role: string): string {
   switch (role) {
     case "interviewer":
       return "#f3e8ff";
-    case "interviewee":
+    case "candidate":
       return "#dbeafe";
     default:
       return "#f3f4f6";

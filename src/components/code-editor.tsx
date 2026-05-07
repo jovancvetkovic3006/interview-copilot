@@ -32,7 +32,7 @@ export function CodeEditor() {
     const code = currentTask.submittedCode || currentTask.starterCode;
     submitCode(code);
     addMessage(
-      "interviewee",
+      "candidate",
       `I've completed the coding task "${currentTask.title}". Here's my solution:\n\n\`\`\`${currentTask.language}\n${code}\n\`\`\``
     );
   };

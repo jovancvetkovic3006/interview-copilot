@@ -1,7 +1,12 @@
 export interface Participant {
   id: string;
   name: string;
-  role: "interviewer" | "interviewee" | "observer";
+  /**
+   * Two roles only:
+   * - `interviewer`: any host (multiple are allowed; one is the designated host).
+   * - `candidate`: the person being interviewed (max one expected per room).
+   */
+  role: "interviewer" | "candidate";
   joinedAt: number;
 }
 
@@ -19,7 +24,7 @@ export interface TranscriptEntry {
   timestamp: number;
 }
 
-/** Background speech analysis — shared in room state but only shown to interviewer & observer clients. */
+/** Background speech analysis — shared in room state but only shown to interviewer clients. */
 export interface TranscriptAnalysisEntry {
   id: string;
   timestamp: number;
@@ -45,12 +50,19 @@ export interface RoomState {
   codingTask: unknown | null;
   transcriptAnalyses: TranscriptAnalysisEntry[];
   interviewReport: InterviewReport | null;
+  /**
+   * Designated host: the first interviewer to join the room.
+   * Only this participant is allowed to configure the interview.
+   * If the host leaves, the next-longest-present interviewer is promoted (server-managed).
+   */
+  hostParticipantId: string | null;
 }
 
 export type RoomMessage =
   | { type: "join"; participant: Participant }
   | { type: "leave"; participantId: string }
   | { type: "participants"; participants: Participant[] }
+  | { type: "host"; hostParticipantId: string | null }
   | { type: "chat"; message: ChatMessage }
   | { type: "agent-response"; content: string }
   | { type: "config"; config: unknown }

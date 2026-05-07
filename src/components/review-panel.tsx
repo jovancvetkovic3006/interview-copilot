@@ -81,7 +81,7 @@ export function ReviewPanel() {
             <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">Generating Review</h2>
             <p className="text-zinc-500">
-              Analyzing the interview for {session.config.intervieweeName}...
+              Analyzing the interview for {session.config.candidateName}...
             </p>
           </CardContent>
         </Card>
@@ -102,7 +102,7 @@ export function ReviewPanel() {
           <div>
             <h1 className="text-3xl font-bold">Interview Review</h1>
             <p className="text-zinc-500 mt-1">
-              {session.config.intervieweeName} &middot; {session.config.role} &middot; {duration} min
+              {session.config.candidateName} &middot; {session.config.role} &middot; {duration} min
             </p>
           </div>
           <Button variant="outline" onClick={resetSession}>

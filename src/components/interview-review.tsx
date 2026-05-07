@@ -12,7 +12,7 @@ type Props = {
   roomCode: string;
   report: InterviewReport | null;
   generating: boolean;
-  role: "interviewer" | "interviewee" | "observer";
+  role: "interviewer" | "candidate";
   /** Shown when the interviewer is in review but no report is in room state yet (e.g. refresh). */
   onRetryReport?: () => void;
 };

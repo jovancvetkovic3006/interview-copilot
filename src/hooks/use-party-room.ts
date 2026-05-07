@@ -28,6 +28,8 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const [config, setConfig] = useState<unknown | null>(null);
   const [codingTask, setCodingTask] = useState<unknown | null>(null);
   const [interviewReport, setInterviewReport] = useState<InterviewReport | null>(null);
+  /** First interviewer (server-elected); only the host renders the SetupForm. */
+  const [hostParticipantId, setHostParticipantId] = useState<string | null>(null);
 
   useEffect(() => {
     participantRoleRef.current = participant?.role ?? null;
@@ -45,7 +47,6 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
 
     socket.addEventListener("open", () => {
       setConnected(true);
-      // Announce ourselves to the room
       socket.send(
         JSON.stringify({ type: "join", participant } satisfies RoomMessage)
       );
@@ -57,6 +58,9 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
       switch (data.type) {
         case "participants":
           setParticipants(data.participants);
+          break;
+        case "host":
+          setHostParticipantId(data.hostParticipantId);
           break;
         case "chat":
           setMessages((prev) => [...prev, data.message]);
@@ -98,7 +102,8 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           break;
         }
         case "transcript-analysis":
-          if (participantRoleRef.current === "interviewee") break;
+          // Only interviewers see speech-analysis insights.
+          if (participantRoleRef.current !== "interviewer") break;
           transcriptionTrace("socket ← transcript-analysis", {
             id: data.analysis.id,
             score: data.analysis.score,
@@ -107,7 +112,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           setTranscriptAnalyses((prev) => [...prev, data.analysis]);
           break;
         case "interview-report":
-          if (participantRoleRef.current === "interviewee") break;
+          if (participantRoleRef.current !== "interviewer") break;
           setInterviewReport(data.report);
           break;
         case "sync-response":
@@ -116,6 +121,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             messages: data.state.messages.length,
             transcriptLines: data.state.transcript.length,
             analyses: (data.state.transcriptAnalyses ?? []).length,
+            host: data.state.hostParticipantId,
           });
           setParticipants(data.state.participants);
           setMessages(data.state.messages);
@@ -123,13 +129,16 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           setPhase(data.state.phase);
           setConfig(data.state.config);
           setCodingTask(data.state.codingTask);
+          setHostParticipantId(data.state.hostParticipantId);
           setTranscriptAnalyses(
-            participantRoleRef.current === "interviewee"
+            participantRoleRef.current !== "interviewer"
               ? []
               : (data.state.transcriptAnalyses ?? [])
           );
           setInterviewReport(
-            participantRoleRef.current === "interviewee" ? null : (data.state.interviewReport ?? null)
+            participantRoleRef.current !== "interviewer"
+              ? null
+              : (data.state.interviewReport ?? null)
           );
           break;
       }
@@ -195,7 +204,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
 
   const sendTranscriptAnalysis = useCallback((analysis: TranscriptAnalysisEntry) => {
     if (!socketRef.current) return;
-    if (participantRoleRef.current === "interviewee") return;
+    if (participantRoleRef.current !== "interviewer") return;
     setTranscriptAnalyses((prev) => [...prev, analysis]);
     socketRef.current.send(
       JSON.stringify({ type: "transcript-analysis", analysis } satisfies RoomMessage)
@@ -220,6 +229,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     config,
     codingTask,
     interviewReport,
+    hostParticipantId,
     sendChat,
     sendAgentResponse,
     sendConfig,
