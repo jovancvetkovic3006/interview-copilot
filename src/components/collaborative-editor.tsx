@@ -47,6 +47,12 @@ interface CollaborativeEditorProps {
   taskTitle?: string;
   taskDescription?: string;
   starterCode?: string;
+  /**
+   * Origin of the current task. `"pre-interview-task"` means the buffer was preloaded with the
+   * candidate's take-home submission; we add a small banner so it's clear we're not starting from
+   * a blank task. Default: omitted (treated as an in-interview assignment).
+   */
+  taskSource?: "pre-interview-task";
 }
 
 function buildCommentPrefix(lang: string): { start?: string; end?: string; line: string } {
@@ -119,6 +125,7 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
       taskTitle,
       taskDescription,
       starterCode,
+      taskSource,
     },
     ref
   ) {
@@ -333,6 +340,11 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
           <div className="flex items-center gap-2">
             <FileCode className="h-4 w-4 text-violet-600" />
             <h3 className="font-semibold text-sm">{taskTitle}</h3>
+            {taskSource === "pre-interview-task" && (
+              <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-900/50">
+                Take-home submission
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="secondary">{language}</Badge>

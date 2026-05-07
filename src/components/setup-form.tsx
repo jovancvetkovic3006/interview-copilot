@@ -38,7 +38,10 @@ import {
   StickyNote,
   Eye,
   Pencil,
+  Link2,
+  ExternalLink,
 } from "lucide-react";
+import { PreTaskNotFoundError, getPreTask } from "@/lib/pretask-client";
 
 const ROLE_CONFIG: Record<string, { topics: string[]; instructions: string }> = {
   "Frontend Developer": {
@@ -200,6 +203,39 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const [preTaskLanguage, setPreTaskLanguage] = useState("javascript");
   const [preTaskStarterCode, setPreTaskStarterCode] = useState("");
   const [preTaskCode, setPreTaskCode] = useState("");
+  // "Load from pre-task code" lookup — pulls the task + submission from the pretask PartyKit room.
+  const [preTaskLookupCode, setPreTaskLookupCode] = useState("");
+  const [preTaskLookupLoading, setPreTaskLookupLoading] = useState(false);
+  const [preTaskLookupError, setPreTaskLookupError] = useState<string | null>(null);
+  const [preTaskLoadedFrom, setPreTaskLoadedFrom] = useState<{
+    code: string;
+    submitted: boolean;
+  } | null>(null);
+
+  const handleLoadPreTask = async () => {
+    const code = preTaskLookupCode.trim().toUpperCase();
+    if (!code) return;
+    setPreTaskLookupLoading(true);
+    setPreTaskLookupError(null);
+    try {
+      const state = await getPreTask(code);
+      setPreTaskTitle(state.def.title);
+      setPreTaskDescription(state.def.description);
+      setPreTaskLanguage(state.def.language);
+      setPreTaskStarterCode(state.def.starterCode);
+      setPreTaskCode(state.submission?.code ?? "");
+      setEnablePreTask(true);
+      setPreTaskLoadedFrom({ code: state.def.code, submitted: !!state.submission });
+    } catch (err) {
+      if (err instanceof PreTaskNotFoundError) {
+        setPreTaskLookupError(`No pre-task found for code ${code}. Did you mistype it?`);
+      } else {
+        setPreTaskLookupError(err instanceof Error ? err.message : "Lookup failed");
+      }
+    } finally {
+      setPreTaskLookupLoading(false);
+    }
+  };
   const [prepTab, setPrepTab] = useState<"questions" | "coding" | "pretask" | "review">("questions");
 
   const effectiveRole = customRole || role;
@@ -795,6 +831,65 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                         }`}
                       />
                     </button>
+                  </div>
+
+                  {/* Take-home lookup: pull a previously-created take-home + the candidate's submission. */}
+                  <div className="rounded-lg border border-blue-200 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/30 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Link2 className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="text-xs font-medium text-blue-900 dark:text-blue-200">
+                        Load from take-home code
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-blue-800/80 dark:text-blue-200/70">
+                      Already sent a take-home link to the candidate? Paste the code to import the task and
+                      their submission.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={preTaskLookupCode}
+                        onChange={(e) => {
+                          setPreTaskLookupCode(e.target.value.toUpperCase());
+                          setPreTaskLookupError(null);
+                        }}
+                        placeholder="ABC123"
+                        maxLength={8}
+                        className="flex-1 h-9 px-3 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-mono text-center tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleLoadPreTask}
+                        disabled={preTaskLookupLoading || preTaskLookupCode.trim().length < 4}
+                      >
+                        {preTaskLookupLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          "Load"
+                        )}
+                      </Button>
+                    </div>
+                    {preTaskLookupError && (
+                      <p className="text-[11px] text-red-600 dark:text-red-400">{preTaskLookupError}</p>
+                    )}
+                    {preTaskLoadedFrom && !preTaskLookupError && (
+                      <p className="text-[11px] text-green-700 dark:text-green-400 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Loaded {preTaskLoadedFrom.code}
+                        {preTaskLoadedFrom.submitted ? " with candidate submission." : " — no submission yet."}
+                      </p>
+                    )}
+                    <a
+                      href="/task/new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-300 hover:underline"
+                    >
+                      Create a new take-home
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   </div>
 
                   {enablePreTask && (

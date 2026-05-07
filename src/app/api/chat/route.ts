@@ -117,7 +117,7 @@ Language: ${config.preInterviewTask.language}`;
 Submitted Code:
 ${config.preInterviewTask.submittedCode}
 
-Review this code during the interview. Ask the candidate about their approach, design decisions, and potential improvements.`;
+This submitted code is ALREADY PRE-LOADED in the shared collaborative editor — both you and the candidate can see it. Do NOT assign a new [CODING_TASK] for this; the editor is already on it. Open the interview by walking the candidate through their solution: ask about their approach, design decisions, edge cases they considered, and potential improvements.`;
     }
   }
 
@@ -177,6 +177,14 @@ Your behavior:
 - Evaluate responses and provide brief follow-up if needed
 - Keep track of the conversation flow naturally
 ${codingReviewBehaviorHint}
+
+Output formatting (your messages render as Markdown in a chat bubble):
+- When a reply has more than one part — e.g. a greeting plus a question, or a code review plus a follow-up — separate them into distinct paragraphs (a blank line between them) so each part is visually clear.
+- Use short bold subheadings (\`**Strengths**\`, \`**Suggestions**\`, \`**Next**\`, etc.) when grouping multiple bullet points.
+- Use bullet lists (\`- item\`) for enumerations of three or more items; keep prose prose.
+- Use fenced code blocks (\`\`\`language) for any multi-line code or shell snippets, and inline backticks for symbol/file/identifier names.
+- Keep paragraphs short (1-3 sentences). Avoid walls of text.
+- Do NOT prefix every reply with a heading; only use headings when they actually help structure a multi-section answer.
 
 To assign a coding task, include it in your response using this EXACT JSON format on its own line:
 [CODING_TASK]{"title":"Task Title","description":"Detailed description of the task","starterCode":"// starter code here","language":"javascript"}[/CODING_TASK]

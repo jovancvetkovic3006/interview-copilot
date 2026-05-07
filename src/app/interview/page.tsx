@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, ArrowRight } from "lucide-react";
+import { Users, ArrowRight, ClipboardList } from "lucide-react";
 
 function generateRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -83,6 +84,21 @@ export default function InterviewLobbyPage() {
               Not the candidate? Open the link your host sent you.
             </p>
           </form>
+
+          <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+            <Link
+              href="/task/new"
+              className="flex items-start gap-2 rounded-lg p-2 -mx-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+            >
+              <ClipboardList className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Send a take-home task</p>
+                <p className="text-xs text-zinc-500">
+                  Create a coding task with a shareable link the candidate can solve before the interview.
+                </p>
+              </div>
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

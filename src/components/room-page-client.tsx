@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { CollaborativeEditor, type CollaborativeEditorHandle } from "@/components/collaborative-editor";
 import { SetupForm } from "@/components/setup-form";
 import { InterviewReviewPanel } from "@/components/interview-review";
+import { AgentMessage } from "@/components/agent-message";
 import {
   Users,
   Wifi,
@@ -356,6 +357,23 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     sendConfig(config);
     sendPhase("interview");
     setStep("interview");
+
+    // If the host attached a take-home (with a submitted solution), pre-load it into the shared
+    // editor so both interviewer and candidate immediately see the candidate's code and can
+    // discuss it. Take precedence over auto-assigning anything else; the AI's system prompt also
+    // already instructs it to discuss the take-home early.
+    const pre = config.preInterviewTask;
+    if (pre && pre.submittedCode && pre.submittedCode.trim().length > 0) {
+      sendCodingTask({
+        title: `Take-home review: ${pre.title}`,
+        description: pre.description,
+        language: pre.language,
+        // The editor seeds the doc with `starterCode`; using the candidate's submission means the
+        // shared buffer opens pre-populated with their solution, ready for live walkthrough.
+        starterCode: pre.submittedCode,
+        source: "pre-interview-task" as const,
+      });
+    }
 
     if (!greetingSentRef.current) {
       greetingSentRef.current = true;
@@ -819,13 +837,13 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                     >
                       <div className="text-xs text-zinc-500 mb-0.5">{msg.senderName}</div>
                       <div
-                        className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                        className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                           msg.role === "agent"
                             ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
                             : "bg-blue-600 text-white"
                         }`}
                       >
-                        {msg.content}
+                        {msg.role === "agent" ? <AgentMessage content={msg.content} /> : msg.content}
                       </div>
                     </div>
                   ))
@@ -868,6 +886,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               taskTitle={(codingTask as { title?: string })?.title}
               taskDescription={(codingTask as { description?: string })?.description}
               starterCode={(codingTask as { starterCode?: string })?.starterCode}
+              taskSource={
+                (codingTask as { source?: string } | null)?.source === "pre-interview-task"
+                  ? "pre-interview-task"
+                  : undefined
+              }
             />
           </div>
         </div>
@@ -1120,13 +1143,13 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                   >
                     <div className="text-xs text-zinc-500 mb-0.5">{msg.senderName}</div>
                     <div
-                      className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                      className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                         msg.role === "agent"
                           ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
                           : "bg-blue-600 text-white"
                       }`}
                     >
-                      {msg.content}
+                      {msg.role === "agent" ? <AgentMessage content={msg.content} /> : msg.content}
                     </div>
                   </div>
                 ))
@@ -1253,6 +1276,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             taskTitle={(codingTask as { title?: string })?.title}
             taskDescription={(codingTask as { description?: string })?.description}
             starterCode={(codingTask as { starterCode?: string })?.starterCode}
+            taskSource={
+              (codingTask as { source?: string } | null)?.source === "pre-interview-task"
+                ? "pre-interview-task"
+                : undefined
+            }
           />
         </div>
       </div>
