@@ -1248,6 +1248,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             roomId={roomCode}
             participantName={participant?.name || "Anonymous"}
             participantRole="interviewer"
+            isSeeder={isHost}
             language={(codingTask as { language?: string })?.language || "javascript"}
             taskTitle={(codingTask as { title?: string })?.title}
             taskDescription={(codingTask as { description?: string })?.description}

@@ -33,6 +33,16 @@ interface CollaborativeEditorProps {
   roomId: string;
   participantName: string;
   participantRole: "interviewer" | "candidate";
+  /**
+   * Whether this client is responsible for inserting the initial starter content
+   * (task header + starterCode) into the empty Yjs document. Should be `true`
+   * for exactly one participant per room — the elected host. Default: `false`.
+   *
+   * Awareness-based selection used to pick the seeder, but it races when two
+   * editors mount simultaneously (each sees only itself) and both insert,
+   * producing interleaved/corrupted text. Pinning this on the host avoids it.
+   */
+  isSeeder?: boolean;
   language?: string;
   taskTitle?: string;
   taskDescription?: string;
@@ -83,26 +93,6 @@ function buildStarterContent(task: { title: string; description: string; starter
   return lines.join("\n");
 }
 
-/** Single writer for initial task text: smallest awareness client among interviewers, else among editors. */
-function pickDesignatedSeederClientId(awareness: {
-  getStates: () => Map<number, { user?: { role?: string } }>;
-}): number | null {
-  const entries = [...awareness.getStates().entries()];
-  const interviewerIds = entries
-    .filter(([, s]) => s.user?.role === "interviewer")
-    .map(([id]) => id)
-    .sort((a, b) => a - b);
-  if (interviewerIds.length > 0) return interviewerIds[0];
-  const editorIds = entries
-    .filter(([, s]) => {
-      const r = s.user?.role;
-      return r === "interviewer" || r === "candidate";
-    })
-    .map(([id]) => id)
-    .sort((a, b) => a - b);
-  return editorIds[0] ?? null;
-}
-
 /** Stable id so each assigned task gets its own Yjs room (re-assign = fresh doc + one seed). */
 function codingTaskRoomSuffix(
   title: string,
@@ -124,6 +114,7 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
       roomId,
       participantName,
       participantRole,
+      isSeeder = false,
       language = "javascript",
       taskTitle,
       taskDescription,
@@ -140,6 +131,17 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
   const awarenessUnsubRef = useRef<(() => void) | null>(null);
   const providerSyncUnsubRef = useRef<(() => void) | null>(null);
   const [connectedUsers, setConnectedUsers] = useState(0);
+
+  /**
+   * Mirror `isSeeder` into a ref so the seed closure (created at editor-mount time) reads the latest
+   * value. This matters if the host is promoted mid-session — their `isSeeder` flips to true after
+   * the editor is already mounted, and the retry effect below can then attempt a deferred seed.
+   */
+  const isSeederRef = useRef(isSeeder);
+  useEffect(() => {
+    isSeederRef.current = isSeeder;
+  }, [isSeeder]);
+  const trySeedRef = useRef<(() => void) | null>(null);
 
   useImperativeHandle(
     ref,
@@ -173,6 +175,7 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
       seedKickTimersRef.current = [];
       // MonacoBinding is destroyed by y-monaco when the model disposes (Editor unmount).
       bindingRef.current = null;
+      trySeedRef.current = null;
 
       const provider = providerRef.current;
       const ydoc = ydocRef.current;
@@ -192,6 +195,16 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
       if (ydoc) destroyCollaborationOnce(ydoc, () => ydoc.destroy());
     };
   }, [roomId, taskRoomSuffix]);
+
+  /**
+   * Host promotion after the editor was already mounted: previous host disconnected and the server
+   * promoted this client. If the doc is still empty (rare — e.g. original host left before seeding),
+   * try to seed now. Safe even if the doc isn't empty: the inner `ytext.length === 0` guard skips.
+   */
+  useEffect(() => {
+    if (!isSeeder) return;
+    trySeedRef.current?.();
+  }, [isSeeder]);
 
   const handleEditorMount = async (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     void monaco;
@@ -241,12 +254,12 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
     // Get the shared text type
     const ytext = ydoc.getText("monaco");
 
-    // Seed only after Yjs has synced, and only from one designated client (see pickDesignatedSeederClientId).
-    // Before sync, two browsers both see ytext.length === 0 and each inserts → duplicated task in the CRDT.
+    // Seed only after Yjs has synced, and ONLY from the designated seeder (the elected host).
+    // Awareness-based selection used to race: two editors mounting at the same time each saw only
+    // themselves and both inserted → interleaved corrupted text.
     const trySeedAfterSync = () => {
       if (!taskTitle || (!starterCode && !taskDescription)) return;
-      const designated = pickDesignatedSeederClientId(awareness);
-      if (designated === null || ydoc.clientID !== designated) return;
+      if (!isSeederRef.current) return;
       ydoc.transact(() => {
         if (ytext.length === 0) {
           ytext.insert(
@@ -261,6 +274,7 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
         }
       });
     };
+    trySeedRef.current = trySeedAfterSync;
 
     const model = editorInstance.getModel();
     const attachBinding = () => {
