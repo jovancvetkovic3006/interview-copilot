@@ -14,6 +14,7 @@ import { CollaborativeEditor, type CollaborativeEditorHandle } from "@/component
 import { SetupForm } from "@/components/setup-form";
 import { InterviewReviewPanel } from "@/components/interview-review";
 import { AgentMessage } from "@/components/agent-message";
+import { CvSuggestionsPanel } from "@/components/cv-suggestions-panel";
 import {
   Users,
   Wifi,
@@ -31,6 +32,7 @@ import {
   ChevronRight,
   Sparkles,
   StopCircle,
+  FileSearch,
 } from "lucide-react";
 
 const TRANSCRIPT_ANALYSIS_DEBOUNCE_MS = 4000;
@@ -96,7 +98,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const [chatInput, setChatInput] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
   const [showTasksPanel, setShowTasksPanel] = useState(true);
-  const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | null>("questions");
+  const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | "cv" | null>("questions");
   const [reportGenerating, setReportGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const greetingSentRef = useRef(false);
@@ -1266,6 +1268,33 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                     ))
                   )}
                 </div>
+              )}
+            </div>
+
+            <div className="border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                onClick={() => setExpandedSection(expandedSection === "cv" ? null : "cv")}
+                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                title="AI-generated suggestions based on the candidate's CV (interviewer only)"
+              >
+                {expandedSection === "cv" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                <FileSearch className="h-3.5 w-3.5 text-purple-500" />
+                CV insights
+                <Badge variant="secondary" className="ml-1 text-[9px] py-0 px-1.5 font-normal">private</Badge>
+              </button>
+              {expandedSection === "cv" && (
+                <CvSuggestionsPanel
+                  config={roomConfig}
+                  onSendQuestion={handleSendQuestion}
+                  onAssignTask={(task) =>
+                    sendCodingTask({
+                      title: task.title,
+                      description: task.description,
+                      language: task.language,
+                      starterCode: task.starterCode,
+                    })
+                  }
+                />
               )}
             </div>
           </div>
