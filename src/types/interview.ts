@@ -37,10 +37,19 @@ export interface PreInterviewTask {
   submittedCode?: string;
 }
 
+export type PresetStrand = "frontend" | "backend" | "fullstack";
+
 export interface PredefinedQuestion {
   id: string;
   question: string;
   category: string;
+  /**
+   * When set, this question appears only for those interview difficulty levels.
+   * When omitted, the question is shown for every level (legacy / universal).
+   */
+  levels?: Difficulty[];
+  /** For Full Stack presets: groups questions in setup (React vs .NET vs shared). */
+  strand?: PresetStrand;
 }
 
 export interface CodingTaskPreset {
@@ -50,6 +59,13 @@ export interface CodingTaskPreset {
   starterCode: string;
   language: string;
   difficulty: Difficulty;
+  /**
+   * When true, the exercise is meant for discussion / static review (types, security, logic)
+   * rather than running code in the shared editor.
+   */
+  staticReview?: boolean;
+  /** For Full Stack presets: groups tasks with questions (React vs .NET vs shared). */
+  strand?: PresetStrand;
 }
 
 export interface ReviewTemplate {

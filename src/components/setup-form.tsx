@@ -19,6 +19,7 @@ import {
   CODING_TASK_PRESETS,
   REVIEW_TEMPLATES,
 } from "@/data/presets";
+import { buildCodingTaskGroups, buildQuestionGroups, flattenGroups } from "@/data/preset-helpers";
 import {
   Play,
   X,
@@ -359,11 +360,10 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
     if (step > 0) setStep(step - 1);
   };
 
-  const availableQuestions = PREDEFINED_QUESTIONS[effectiveRole] || [];
-  const availableCodingTasks = [
-    ...(CODING_TASK_PRESETS["General"] || []),
-    ...(CODING_TASK_PRESETS[effectiveRole] || []),
-  ];
+  const questionGroups = buildQuestionGroups(PREDEFINED_QUESTIONS[effectiveRole] || [], difficulty, effectiveRole);
+  const codingTaskGroups = buildCodingTaskGroups(effectiveRole, difficulty, CODING_TASK_PRESETS);
+  const availableQuestionsFlat = flattenGroups(questionGroups);
+  const availableCodingTasksFlat = flattenGroups(codingTaskGroups);
 
   return (
     <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
@@ -737,29 +737,35 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                 <div className="space-y-3">
                   <p className="text-xs text-zinc-500">
                     Select questions for the agent to ask. The agent will weave these into the conversation naturally.
+                    Lists are ordered by seniority (matched level first), then by strand for Full Stack (C# · .NET, React, shared), then all-level questions.
                   </p>
-                  {availableQuestions.length > 0 ? (
-                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                      {availableQuestions.map((q) => {
-                        const isSelected = selectedQuestions.find((sq) => sq.id === q.id);
-                        return (
-                          <button
-                            key={q.id}
-                            onClick={() => toggleQuestion(q)}
-                            className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
-                              isSelected
-                                ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
-                                : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="text-sm">{q.question}</div>
-                              {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
-                            </div>
-                            <Badge variant="secondary" className="mt-1.5 text-xs">{q.category}</Badge>
-                          </button>
-                        );
-                      })}
+                  {availableQuestionsFlat.length > 0 ? (
+                    <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+                      {questionGroups.map((group) => (
+                        <div key={group.heading} className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                          {group.items.map((q) => {
+                            const isSelected = selectedQuestions.find((sq) => sq.id === q.id);
+                            return (
+                              <button
+                                key={q.id}
+                                onClick={() => toggleQuestion(q)}
+                                className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
+                                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="text-sm">{q.question}</div>
+                                  {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
+                                </div>
+                                <Badge variant="secondary" className="mt-1.5 text-xs">{q.category}</Badge>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <p className="text-sm text-zinc-400 py-4 text-center">
@@ -773,36 +779,46 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
               {prepTab === "coding" && (
                 <div className="space-y-3">
                   <p className="text-xs text-zinc-500">
-                    Select coding tasks to use during the interview. The agent will assign these at appropriate moments.
+                    Select coding tasks to use during the interview. Role-specific tasks appear first (hardest first), then General.
                   </p>
-                  {availableCodingTasks.length > 0 ? (
-                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                      {availableCodingTasks.map((task) => {
-                        const isSelected = selectedCodingTasks.find((t) => t.id === task.id);
-                        return (
-                          <button
-                            key={task.id}
-                            onClick={() => toggleCodingTask(task)}
-                            className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
-                              isSelected
-                                ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
-                                : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="text-sm font-medium">{task.title}</div>
-                                <div className="text-xs text-zinc-500 mt-0.5">{task.description}</div>
-                              </div>
-                              {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
-                            </div>
-                            <div className="flex gap-1.5 mt-2">
-                              <Badge variant="secondary" className="text-xs">{task.language}</Badge>
-                              <Badge variant="secondary" className="text-xs capitalize">{task.difficulty}</Badge>
-                            </div>
-                          </button>
-                        );
-                      })}
+                  {availableCodingTasksFlat.length > 0 ? (
+                    <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+                      {codingTaskGroups.map((group) => (
+                        <div key={group.heading} className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                          {group.items.map((task) => {
+                            const isSelected = selectedCodingTasks.find((t) => t.id === task.id);
+                            return (
+                              <button
+                                key={task.id}
+                                onClick={() => toggleCodingTask(task)}
+                                className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
+                                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="text-sm font-medium">{task.title}</div>
+                                    <div className="text-xs text-zinc-500 mt-0.5">{task.description}</div>
+                                  </div>
+                                  {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
+                                </div>
+                                <div className="flex gap-1.5 mt-2 flex-wrap">
+                                  <Badge variant="secondary" className="text-xs">{task.language}</Badge>
+                                  <Badge variant="secondary" className="text-xs capitalize">{task.difficulty}</Badge>
+                                  {task.staticReview && (
+                                    <Badge variant="outline" className="text-xs border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-200">
+                                      Static review
+                                    </Badge>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <p className="text-sm text-zinc-400 py-4 text-center">

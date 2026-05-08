@@ -7,6 +7,7 @@ import type { Participant } from "@/types/room";
 import type { InterviewConfig } from "@/types/interview";
 import type { CodingTaskPreset, PredefinedQuestion } from "@/types/interview";
 import { PREDEFINED_QUESTIONS, CODING_TASK_PRESETS } from "@/data/presets";
+import { buildCodingTaskGroups, buildQuestionGroups, flattenGroups } from "@/data/preset-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -513,11 +514,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   };
 
   const configuredRole = roomConfig?.role || "Frontend Developer";
-  const availableQuestions: PredefinedQuestion[] = PREDEFINED_QUESTIONS[configuredRole] || [];
-  const availableTasks: CodingTaskPreset[] = [
-    ...(CODING_TASK_PRESETS["General"] || []),
-    ...(CODING_TASK_PRESETS[configuredRole] || []),
-  ];
+  const configuredDifficulty = roomConfig?.difficulty || "mid";
+  const questionGroups = buildQuestionGroups(PREDEFINED_QUESTIONS[configuredRole] || [], configuredDifficulty, configuredRole);
+  const codingTaskGroups = buildCodingTaskGroups(configuredRole, configuredDifficulty, CODING_TASK_PRESETS);
+  const availableQuestions: PredefinedQuestion[] = flattenGroups(questionGroups);
+  const availableTasks: CodingTaskPreset[] = flattenGroups(codingTaskGroups);
 
   const handleAssignTask = useCallback((task: CodingTaskPreset) => {
     sendCodingTask({ title: task.title, description: task.description, language: task.language, starterCode: task.starterCode });
@@ -1201,27 +1202,32 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 Questions ({availableQuestions.length})
               </button>
               {expandedSection === "questions" && (
-                <div className="px-3 pb-3 space-y-1.5">
+                <div className="px-3 pb-3 space-y-3">
                   {availableQuestions.length === 0 ? (
                     <p className="text-xs text-zinc-400 px-1">No questions available for this role.</p>
                   ) : (
-                    availableQuestions.map((q) => (
-                      <div key={q.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-blue-300 dark:hover:border-blue-800 transition-colors">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <Badge variant="secondary" className="text-[10px] mb-1">{q.category}</Badge>
-                            <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{q.question}</p>
+                    questionGroups.map((group) => (
+                      <div key={group.heading} className="space-y-1.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                        {group.items.map((q) => (
+                          <div key={q.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-blue-300 dark:hover:border-blue-800 transition-colors">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <Badge variant="secondary" className="text-[10px] mb-1">{q.category}</Badge>
+                                <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{q.question}</p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
+                                onClick={() => handleSendQuestion(q.question)}
+                                title="Send this question to chat"
+                              >
+                                <Send className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
-                            onClick={() => handleSendQuestion(q.question)}
-                            title="Send this question to chat"
-                          >
-                            <Send className="h-3 w-3" />
-                          </Button>
-                        </div>
+                        ))}
                       </div>
                     ))
                   )}
@@ -1239,31 +1245,41 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 Coding Tasks ({availableTasks.length})
               </button>
               {expandedSection === "tasks" && (
-                <div className="px-3 pb-3 space-y-1.5">
+                <div className="px-3 pb-3 space-y-3">
                   {availableTasks.length === 0 ? (
                     <p className="text-xs text-zinc-400 px-1">No coding tasks available.</p>
                   ) : (
-                    availableTasks.map((task) => (
-                      <div key={task.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-green-300 dark:hover:border-green-800 transition-colors">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">{task.title}</span>
-                              <Badge variant="secondary" className="text-[10px]">{task.language}</Badge>
-                              {task.difficulty && <Badge variant="secondary" className="text-[10px] capitalize">{task.difficulty}</Badge>}
+                    codingTaskGroups.map((group) => (
+                      <div key={group.heading} className="space-y-1.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                        {group.items.map((task) => (
+                          <div key={task.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-green-300 dark:hover:border-green-800 transition-colors">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                  <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">{task.title}</span>
+                                  <Badge variant="secondary" className="text-[10px]">{task.language}</Badge>
+                                  {task.difficulty && <Badge variant="secondary" className="text-[10px] capitalize">{task.difficulty}</Badge>}
+                                  {task.staticReview && (
+                                    <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-200">
+                                      Static
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-zinc-500 line-clamp-2">{task.description}</p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 px-2 text-[10px]"
+                                onClick={() => handleAssignTask(task)}
+                                title="Assign this task to the editor"
+                              >
+                                Assign
+                              </Button>
                             </div>
-                            <p className="text-[11px] text-zinc-500 line-clamp-2">{task.description}</p>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 px-2 text-[10px]"
-                            onClick={() => handleAssignTask(task)}
-                            title="Assign this task to the editor"
-                          >
-                            Assign
-                          </Button>
-                        </div>
+                        ))}
                       </div>
                     ))
                   )}

@@ -13,7 +13,11 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
-      const pdfParse = (await import("pdf-parse")).default;
+      // Import the inner module path, NOT `pdf-parse`. The package's index.js has a debug
+      // block that runs when `!module.parent`, which is the case under Next.js bundling, and
+      // it tries to open `./test/data/05-versions-space.pdf` — producing the ENOENT we hit.
+      // Importing the inner file skips that block entirely.
+      const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
       const data = await pdfParse(buffer);
       return NextResponse.json({ text: data.text, fileName: file.name });
     }
