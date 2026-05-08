@@ -211,7 +211,7 @@ export function CvSuggestionsPanel({ config, onSendQuestion, onAssignTask }: CvS
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[11px] text-zinc-500 line-clamp-2">{task.description}</p>
+                  <p className="text-[11px] text-zinc-500 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</p>
                   {task.rationale && (
                     <p className="mt-1 text-[10px] text-zinc-500 italic line-clamp-2" title={task.rationale}>
                       Why: {task.rationale}

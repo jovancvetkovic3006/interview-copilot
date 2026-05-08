@@ -801,7 +801,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
                                     <div className="text-sm font-medium">{task.title}</div>
-                                    <div className="text-xs text-zinc-500 mt-0.5">{task.description}</div>
+                                    <div className="text-xs text-zinc-500 mt-0.5 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</div>
                                   </div>
                                   {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
                                 </div>

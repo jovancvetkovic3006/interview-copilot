@@ -1266,7 +1266,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                                     </Badge>
                                   )}
                                 </div>
-                                <p className="text-[11px] text-zinc-500 line-clamp-2">{task.description}</p>
+                                <p className="text-[11px] text-zinc-500 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</p>
                               </div>
                               <Button
                                 variant="ghost"

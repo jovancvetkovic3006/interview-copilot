@@ -182,7 +182,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-1",
       title: "Find the Maximum in an Array",
-      description: "Write a function that loops through an array of numbers and returns the largest value. Do not use Math.max or built-in sort.",
+      description: `What it is: A small array-scanning exercise (classic warm-up).
+
+Goal: Return the largest number in an array by looping and comparing—no Math.max, no sort.
+
+What to do: Implement findMax(numbers). Decide and document behavior for an empty array (return undefined, throw, or null). Handle negatives and ties.
+
+Finish when: You can walk through examples (e.g. [3,1,4], [-2,-9], single element) and the logic is clear in the shared editor.`,
       starterCode: "function findMax(numbers) {\n  // Loop through the array and find the maximum value\n}",
       language: "javascript",
       difficulty: "junior",
@@ -190,7 +196,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-2",
       title: "Reverse an Array In-Place",
-      description: "Write a function that reverses an array in-place without creating a new array. Use a loop to swap elements from both ends.",
+      description: `What it is: Mutate the given array so its elements appear in reverse order without allocating a second array.
+
+Goal: Practice indices and swapping from both ends toward the middle.
+
+What to do: Implement reverseArray(arr). Use a loop and swap arr[i] with arr[j]. Do not use reverse() or a copy-then-assign pattern.
+
+Finish when: Odd/even lengths both work; you can explain O(n) time and O(1) extra space.`,
       starterCode: "function reverseArray(arr) {\n  // Reverse the array in-place using a loop\n}",
       language: "javascript",
       difficulty: "junior",
@@ -198,7 +210,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-3",
       title: "Remove Duplicates from an Array",
-      description: "Write a function that takes an array and returns a new array with duplicates removed, preserving the original order. Do not use Set.",
+      description: `What it is: Produce a new array with first occurrence of each value only, in original order.
+
+Goal: Duplicate removal without Set (use a plain loop / object map if you like).
+
+What to do: Implement removeDuplicates(arr). Preserve order: [1,2,1,3] → [1,2,3].
+
+Finish when: Works for strings and numbers; mention complexity; edge cases: empty array, all duplicates.`,
       starterCode: "function removeDuplicates(arr) {\n  // Loop through and remove duplicates\n}",
       language: "javascript",
       difficulty: "junior",
@@ -206,7 +224,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-4",
       title: "Two Sum",
-      description: "Given an array of numbers and a target sum, return the indices of two numbers that add up to the target. Each input has exactly one solution.",
+      description: `What it is: Given nums and target, return indices i, j such that nums[i] + nums[j] === target (exactly one solution).
+
+Goal: Start with brute force O(n²), then optionally improve with a hash map O(n).
+
+What to do: Implement twoSum(nums, target). Do not reuse the same index twice.
+
+Finish when: Correct on a small example; you can explain your approach and why it’s correct.`,
       starterCode: "function twoSum(nums, target) {\n  // Find two indices whose values add up to target\n}",
       language: "javascript",
       difficulty: "mid",
@@ -214,7 +238,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-5",
       title: "FizzBuzz",
-      description: "Write a function that returns an array of strings from 1 to n. For multiples of 3 use 'Fizz', multiples of 5 use 'Buzz', multiples of both use 'FizzBuzz', otherwise the number as a string.",
+      description: `What it is: Build the classic FizzBuzz sequence from 1 to n as an array of strings.
+
+Goal: Practice modulo rules and ordering (3 & 5 before 3 or 5 alone).
+
+What to do: Implement fizzBuzz(n). Multiples of 3 → "Fizz", 5 → "Buzz", both → "FizzBuzz", else string of the number.
+
+Finish when: n=15 produces the right pattern; handles n=0 or invalid n if you define behavior.`,
       starterCode: "function fizzBuzz(n) {\n  // Return array of FizzBuzz results from 1 to n\n}",
       language: "javascript",
       difficulty: "junior",
@@ -222,7 +252,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s1",
       title: "Static review: null and shape",
-      description: "Do not run. List every crash, type, or assumption bug. Propose a safer version (optional types, guards, or validation).",
+      description: `What it is: Code review only—do not rely on running it.
+
+Goal: Spot crashes and bad assumptions when user or profile data is missing or the wrong shape.
+
+What to do: List every failure (null name, missing email, non-string). Propose guards, optional chaining, or validation/schema.
+
+Finish when: You’ve named concrete bugs and sketched a safer implementation or types in the editor.`,
       starterCode: `function formatUserLabel(user) {\n  return user.name.trim().toUpperCase() + " <" + user.email.toLowerCase() + ">";\n}`,
       language: "javascript",
       difficulty: "junior",
@@ -231,7 +267,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s2",
       title: "Static review: async mistake",
-      description: "Do not run. Identify incorrect async/await usage and explain the fix.",
+      description: `What it is: Review async fetch usage—no execution required.
+
+Goal: See that fetch returns Promises and must be awaited (or chained) before .json().
+
+What to do: Explain what breaks today and show the corrected async/await or Promise.all pattern for parallel loads.
+
+Finish when: Clear fix is written or narrated; discuss error handling for failed HTTP.`,
       starterCode: `async function loadProfile(userId) {\n  const user = fetch("/api/users/" + userId);\n  const orders = fetch("/api/orders?user=" + userId);\n  return { user: await user.json(), orders: await orders.json() };\n}`,
       language: "javascript",
       difficulty: "mid",
@@ -240,7 +282,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s3",
       title: "Static review: SQL injection",
-      description: "Do not execute. Explain injection risk and rewrite using a safe parameterised pattern (pseudo-SQL for your stack).",
+      description: `What it is: Security review of a SQL string built with user input.
+
+Goal: Explain how concatenation enables injection and how parameterised queries / ORM bindings prevent it.
+
+What to do: Rewrite the query using placeholders (e.g. ? or $1) and show how the app passes userId safely.
+
+Finish when: Attack example + safe rewrite + one sentence on least privilege / validation.`,
       starterCode: `-- userId from request — app builds this string with concatenation (unsafe)\nSELECT * FROM orders WHERE user_id = '<USER_INPUT>' AND status = 'open';`,
       language: "sql",
       difficulty: "mid",
@@ -249,7 +297,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s4",
       title: "Static review: time and money",
-      description: "Do not run. Find rounding, locale, and floating-point issues. How would you model currency safely?",
+      description: `What it is: Review numeric code for money and display bugs.
+
+Goal: Floating-point binary errors, wrong rounding, and weak formatting for currency.
+
+What to do: Call out issues in lineTotal/formatInvoice. Propose integer minor units (cents) or a decimal library; correct rounding and locale.
+
+Finish when: Clear list of bugs + recommended production approach.`,
       starterCode: `function lineTotal(quantity, unitPrice) {\n  return quantity * unitPrice;\n}\n\nfunction formatInvoice(total) {\n  return total.toFixed(1) + " USD";\n}`,
       language: "javascript",
       difficulty: "mid",
@@ -258,7 +312,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s5",
       title: "Static review: concurrency hazard",
-      description: "Do not run. Identify the race and propose a fix (locking, transactions, or idempotency).",
+      description: `What it is: Review read-modify-write across async DB calls under concurrency.
+
+Goal: Recognize lost updates when two requests decrement stock simultaneously.
+
+What to do: Describe the race; propose SQL UPDATE ... WHERE stock >= 1, transaction + row lock, or atomic decrement.
+
+Finish when: Correct narrative and at least one concrete fix pattern.`,
       starterCode: `async function decrementStock(productId) {\n  const row = await db.get("SELECT stock FROM products WHERE id = ?", productId);\n  const next = row.stock - 1;\n  await db.run("UPDATE products SET stock = ? WHERE id = ?", next, productId);\n}`,
       language: "javascript",
       difficulty: "senior",
@@ -267,7 +327,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s6",
       title: "Static review: Python types",
-      description: "Do not run mypy. List type/logic issues and suggest signatures and guards.",
+      description: `What it is: Static analysis of a tiny Python helper—no need to run mypy.
+
+Goal: Empty list, wrong element type, missing keys, None name.
+
+What to do: List runtime errors; suggest typing (list[dict], TypedDict), guards, and tests.
+
+Finish when: Revised signature or defensive code sketched.`,
       starterCode: `def first_label(items):\n    return items[0]["name"].strip().lower()\n`,
       language: "python",
       difficulty: "mid",
@@ -276,7 +342,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s7",
       title: "Static review: regex cost",
-      description: "Discuss catastrophic backtracking or unsafe user regex. What would you change?",
+      description: `What it is: Review building a RegExp from untrusted user input.
+
+Goal: ReDoS (catastrophic backtracking) and validation bypass risks.
+
+What to do: Explain dangers; prefer allow-lists, anchored patterns, or a parser; never concatenate raw user regex without review.
+
+Finish when: Threat + safer validation strategy stated.`,
       starterCode: `const emailPattern = new RegExp("^(" + userSuppliedPattern + ")+$");\n`,
       language: "javascript",
       difficulty: "senior",
@@ -285,7 +357,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-gen-s8",
       title: "Static review: API pagination",
-      description: "Review this handler for correctness, security (injection), and performance. No execution.",
+      description: `What it is: Review an HTTP handler that builds SQL from query params.
+
+Goal: Injection via page, NaN offsets, unbounded scans, missing limits.
+
+What to do: List issues; propose validated integer page/size, parameterised LIMIT/OFFSET or cursor API, and caps.
+
+Finish when: Security + correctness fixes outlined.`,
       starterCode: `app.get("/items", (req, res) => {\n  const page = parseInt(req.query.page, 10) || 0;\n  const sql = "SELECT * FROM items LIMIT 20 OFFSET " + page * 20;\n  db.all(sql, (err, rows) => res.json(rows));\n});`,
       language: "javascript",
       difficulty: "senior",
@@ -296,7 +374,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-1",
       title: "Debounced Search Input",
-      description: "Implement a search input component that debounces API calls. The component should wait 300ms after the user stops typing before triggering a search callback.",
+      description: `What it is: A controlled input that triggers search only after the user pauses typing (avoids spamming the API).
+
+Goal: Implement debouncing (~300ms) and optional cleanup on unmount.
+
+What to do: Build DebouncedSearch({ onSearch }) so onSearch(query) runs 300ms after the last keystroke; cancel pending timers on rapid typing.
+
+Finish when: You can explain the timer/ref pattern and show handling of empty query and unmount.`,
       starterCode: "function DebouncedSearch({ onSearch }) {\n  // Implement debounced search\n}",
       language: "javascript",
       difficulty: "mid",
@@ -304,7 +388,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-2",
       title: "Infinite Scroll List",
-      description: "Implement an infinite scroll component that loads more items when the user scrolls near the bottom. Use Intersection Observer API.",
+      description: `What it is: A list that loads more rows as the user nears the bottom (better than huge initial fetch).
+
+Goal: Use Intersection Observer (or equivalent) to detect when a sentinel enters view and call fetchItems(cursor/page).
+
+What to do: Implement InfiniteList({ fetchItems }) with loading/error/empty states and guard against duplicate fetches.
+
+Finish when: Clear loading flow and how you’d reset on filter change.`,
       starterCode: "function InfiniteList({ fetchItems }) {\n  // Implement infinite scroll\n}",
       language: "javascript",
       difficulty: "senior",
@@ -312,7 +402,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-3",
       title: "Flatten Nested Object",
-      description: "Write a function that flattens a deeply nested object into a single-level object with dot-notation keys. Example: { a: { b: { c: 1 } } } => { 'a.b.c': 1 }",
+      description: `What it is: Turn nested objects into a single flat map with dot keys (e.g. { a: { b: 1 } } → { "a.b": 1 }).
+
+Goal: Recursion or stack; handle arrays if you choose to (document convention).
+
+What to do: Implement flattenObject(obj, prefix). Skip or stringify arrays consistently.
+
+Finish when: Works on 2–3 level nesting; mention depth/cycle strategy if asked.`,
       starterCode: "function flattenObject(obj, prefix = '') {\n  // Implement\n}",
       language: "javascript",
       difficulty: "mid",
@@ -320,7 +416,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-s1",
       title: "Static review: effect dependencies",
-      description: "Do not run. Explain stale closures, missing deps, and how you would fix this hook.",
+      description: `What it is: Hook review—stale closure / missing dependency bug.
+
+Goal: Explain why results never update when query changes; fix dependency array and optional abort (AbortController).
+
+What to do: Walk through render/effect cycles; propose correct deps and race handling.
+
+Finish when: Fixed hook or clear written explanation in editor.`,
       starterCode: `function useSearch(query) {\n  const [results, setResults] = useState([]);\n  useEffect(() => {\n    fetch("/api/search?q=" + query).then((r) => r.json()).then(setResults);\n  }, []);\n  return results;\n}`,
       language: "javascript",
       difficulty: "mid",
@@ -329,7 +431,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-s2",
       title: "Static review: list keys & a11y",
-      description: "Do not run. Flag React and accessibility issues; suggest fixes.",
+      description: `What it is: Markup review for React lists and accessibility.
+
+Goal: Wrong list child, clickable non-button, missing keyboard/ARIA for a selectable row.
+
+What to do: Fix element choice (<li>, button/link), keys, roles/labels, focus outline.
+
+Finish when: Concrete JSX improvements listed.`,
       starterCode: `<ul>\n  {items.map((item) => (\n    <div onClick={() => select(item.id)}>\n      {item.label}\n    </div>\n  ))}\n</ul>`,
       language: "javascript",
       difficulty: "junior",
@@ -338,7 +446,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-s3",
       title: "Static review: TypeScript component props",
-      description: "Do not run tsc. Fix the types: narrow unions, optional chaining, and event types.",
+      description: `What it is: Props typing and null-safety in a tiny component.
+
+Goal: user may be undefined/null—accessing user.name is unsafe.
+
+What to do: Narrow with guards, default UI, or optional chaining; tighten Props type.
+
+Finish when: Safe render path + accurate types sketched.`,
       starterCode: `type Props = { user?: { name: string } | null };\n\nfunction Welcome({ user }: Props) {\n  return <h1>Hello, {user.name.toUpperCase()}</h1>;\n}`,
       language: "typescript",
       difficulty: "mid",
@@ -347,7 +461,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-s4",
       title: "Static review: CORS & credentials",
-      description: "Discuss what's wrong with this fetch from a browser and how you'd fix it server- and client-side.",
+      description: `What it is: Browser fetch to another origin—review security and cookie/credential rules.
+
+Goal: Explain CORS, credentialed requests, and why Authorization header alone may be wrong for cookie sessions.
+
+What to do: Describe server headers (Access-Control-*), credentials mode, and SameSite cookies if relevant.
+
+Finish when: Coherent client + server fix narrative.`,
       starterCode: `fetch("https://api.example.com/me", {\n  headers: { Authorization: "Bearer " + token },\n}).then((r) => r.json());`,
       language: "javascript",
       difficulty: "senior",
@@ -356,7 +476,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-s5",
       title: "Static review: CSS layout",
-      description: "No browser. Explain layout issues (overflow, flex vs grid) and propose better CSS.",
+      description: `What it is: CSS that may overflow or break layout constraints.
+
+Goal: Fixed heights vs content, overflow visible vs hidden, flex/grid basics.
+
+What to do: Propose layout that contains content (min-height, overflow-auto, flex column).
+
+Finish when: Clear issue list + revised rules.`,
       starterCode: `.card {\n  height: 100px;\n}\n.card__body {\n  height: 120px;\n  overflow: visible;\n}`,
       language: "css",
       difficulty: "junior",
@@ -365,7 +491,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fe-4",
       title: "Virtual list sketch",
-      description: "Sketch (pseudocode) a windowed list that renders only visible rows for 100k items. Focus on scroll position and item height.",
+      description: `What it is: Design-only—windowed rendering for very long lists (no need for a full working lib).
+
+Goal: Only mount DOM for visible rows; total scroll height from item count × row height.
+
+What to do: Pseudocode scroll handler, start/end index from scrollTop, spacer divs for off-screen height.
+
+Finish when: Explain how resize/variable height would complicate things.`,
       starterCode: `function VirtualList({ items, rowHeight, height }) {\n  // Pseudocode: visible range, offset, total height\n}`,
       language: "javascript",
       difficulty: "senior",
@@ -376,7 +508,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-1",
       title: "Rate Limiter",
-      description: "Implement a rate limiter class that allows N requests per time window. It should have a method `isAllowed(clientId)` that returns true/false.",
+      description: `What it is: Per-client request cap over a sliding or fixed time window (API protection).
+
+Goal: Implement RateLimiter(maxRequests, windowMs) with isAllowed(clientId) returning boolean.
+
+What to do: Track timestamps per client; evict old entries; define behavior when limit exceeded.
+
+Finish when: Explain complexity and why this is approximate vs distributed rate limiting.`,
       starterCode: "class RateLimiter {\n  constructor(maxRequests, windowMs) {\n    // Implement\n  }\n  isAllowed(clientId) {\n    // Implement\n  }\n}",
       language: "javascript",
       difficulty: "senior",
@@ -384,7 +522,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-2",
       title: "LRU Cache",
-      description: "Implement a Least Recently Used (LRU) cache with get and put operations, both in O(1) time.",
+      description: `What it is: Fixed-capacity cache evicting the least recently used entry on overflow.
+
+Goal: get and put in O(1) average time (hash map + doubly linked list or ordered map).
+
+What to do: Implement LRUCache(capacity); get updates recency; put evicts LRU if full.
+
+Finish when: Walk through evict path on paper for capacity=2.`,
       starterCode: "class LRUCache {\n  constructor(capacity) {\n    // Implement\n  }\n  get(key) {\n    // Implement\n  }\n  put(key, value) {\n    // Implement\n  }\n}",
       language: "javascript",
       difficulty: "senior",
@@ -392,7 +536,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-3",
       title: "Parse Query String",
-      description: "Write a function that parses a URL query string into an object. Handle arrays (repeated keys), nested keys with brackets, and URL-encoded values.",
+      description: `What it is: Convert "?a=1&b=2&b=3" into a structured object (arrays for repeated keys).
+
+Goal: Correct decoding, bracket notation for nesting if you support it (document rules).
+
+What to do: Implement parseQueryString(queryString) without relying on URLSearchParams if you want the exercise; handle empty and leading ?.
+
+Finish when: Examples covered: repeated keys → array, encoded values.`,
       starterCode: "function parseQueryString(queryString) {\n  // Implement\n}",
       language: "javascript",
       difficulty: "mid",
@@ -400,7 +550,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-s1",
       title: "Static review: N+1 queries",
-      description: "Do not run. Identify the N+1 pattern and rewrite as a single query or batch strategy (pseudo-SQL).",
+      description: `What it is: ORM/service loop issuing one query per row.
+
+Goal: Name the pattern and batch or join.
+
+What to do: Sketch single query with JOIN or IN (...) or DataLoader-style batch.
+
+Finish when: Before/after query count explained.`,
       starterCode: `for (const order of orders) {\n  const customer = await db.query("SELECT * FROM customers WHERE id = ?", order.customer_id);\n  order.customer = customer;\n}`,
       language: "javascript",
       difficulty: "mid",
@@ -409,7 +565,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-s2",
       title: "Static review: JWT middleware",
-      description: "Do not run. List security flaws (alg none, secret handling, clock skew) and fixes.",
+      description: `What it is: Broken “auth” that decodes JWT payload without verification.
+
+Goal: List crypto/signature, alg, secret, audience, expiry, and header parsing issues.
+
+What to do: Describe proper verify step with library; reject none alg; use HTTPS.
+
+Finish when: Attack scenarios + hardened middleware outline.`,
       starterCode: `function auth(req, res, next) {\n  const token = req.headers.authorization.split(" ")[1];\n  const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64"));\n  req.user = payload;\n  next();\n}`,
       language: "javascript",
       difficulty: "senior",
@@ -418,7 +580,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-s3",
       title: "Static review: Go error handling",
-      description: "Discuss error propagation, context cancellation, and resource leaks.",
+      description: `What it is: Handler ignoring errors and leaking partial reads.
+
+Goal: Check every error return; defer Close; validate JSON; status codes.
+
+What to do: Rewrite with proper if err != nil, http.Error, limited body reader.
+
+Finish when: Concrete fix list.`,
       starterCode: `func Handle(w http.ResponseWriter, r *http.Request) {\n\tbody, _ := ioutil.ReadAll(r.Body)\n\tjson.Unmarshal(body, &payload)\n\tw.Write([]byte("ok"))\n}`,
       language: "go",
       difficulty: "mid",
@@ -427,7 +595,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-s4",
       title: "Static review: isolation levels",
-      description: "Explain anomalies (dirty read, phantom) this transaction may allow. No DB execution.",
+      description: `What it is: Transaction snippet—what anomalies can other sessions see?
+
+Goal: Relate isolation level to dirty read / non-repeatable read / phantom.
+
+What to do: State default level for your DB; suggest SERIALIZABLE or locks if needed.
+
+Finish when: Scenario-based explanation.`,
       starterCode: `-- Session A\nBEGIN;\nSELECT balance FROM accounts WHERE id = 1;\n-- ... later UPDATE ...\nCOMMIT;`,
       language: "sql",
       difficulty: "senior",
@@ -436,7 +610,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-be-4",
       title: "Idempotent POST sketch",
-      description: "Pseudocode: how would you make `POST /transfers` safe to retry? Mention idempotency keys and storage.",
+      description: `What it is: Design payment/transfer POST safe under retries and double-clicks.
+
+Goal: Idempotency key, unique constraint, return same response on replay.
+
+What to do: Pseudocode: store key → result; begin transaction; insert or return cached outcome.
+
+Finish when: Client responsibility (sending key) + server storage clear.`,
       starterCode: `// POST /transfers — body: { idempotencyKey, from, to, amount }\nfunction handleTransfer(req) {\n  // Outline only\n}`,
       language: "javascript",
       difficulty: "senior",
@@ -447,7 +627,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-1",
       title: "TODO API + UI",
-      description: "Design a simple TODO REST API with CRUD operations. Write the route handlers and describe the data model you would use.",
+      description: `What it is: End-to-end design for a minimal TODO feature—REST shape and persistence sketch.
+
+Goal: Show you can define resources, HTTP verbs, status codes, and a simple data model (id, title, done, timestamps).
+
+What to do: Outline GET/POST/PUT/DELETE routes, request/response JSON, validation rules, and id generation.
+
+Finish when: Happy path + at least one error case (404, 400) described; optional note on auth.`,
       starterCode: "// Define routes and handlers\n// GET /todos\n// POST /todos\n// PUT /todos/:id\n// DELETE /todos/:id\n",
       language: "javascript",
       difficulty: "mid",
@@ -456,7 +642,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-2",
       title: "Middleware Chain",
-      description: "Implement a middleware system similar to Express.js. Each middleware receives (req, res, next) and can modify the request or call next().",
+      description: `What it is: Mini framework—compose functions that run in order around a fake req/res.
+
+Goal: use(fn) registers middleware; execute runs the chain; each calls next() or ends the response.
+
+What to do: Implement MiddlewareChain with use and execute; handle errors bubbling or try/catch convention.
+
+Finish when: Demo order: logging → auth stub → handler.`,
       starterCode: "class MiddlewareChain {\n  constructor() {\n    this.middlewares = [];\n  }\n  use(fn) {\n    // Implement\n  }\n  execute(req, res) {\n    // Implement\n  }\n}",
       language: "javascript",
       difficulty: "senior",
@@ -465,7 +657,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-s1",
       title: "Static review: duplicate validation",
-      description: "Do not run. Where is validation missing or inconsistent between client and server?",
+      description: `What it is: Client vs server validation mismatch review.
+
+Goal: Client-only checks are bypassable; server must enforce schema, length, and authz.
+
+What to do: List gaps (email check, password rules, SQL injection); show server-side validation + hashing for passwords.
+
+Finish when: Threat + minimum server checks written.`,
       starterCode: `// Client\nif (form.email.includes("@")) submit(form);\n\n// Server\napp.post("/register", (req, res) => {\n  db.insert({ email: req.body.email, password: req.body.password });\n});`,
       language: "javascript",
       difficulty: "mid",
@@ -475,7 +673,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-s2",
       title: "Static review: cookie session",
-      description: "Discuss cookie flags, CSRF, and SameSite. No execution.",
+      description: `What it is: Session cookie set from server—security review.
+
+Goal: HttpOnly alone is insufficient; need Secure, SameSite, path, CSRF token for state-changing requests, rotation.
+
+What to do: Explain CSRF with cookie auth; when to use SameSite=strict/lax; double-submit or CSRF header.
+
+Finish when: Hardened cookie options + CSRF strategy.`,
       starterCode: `res.cookie("session", token, { httpOnly: true });`,
       language: "javascript",
       difficulty: "senior",
@@ -485,7 +689,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-cs-1",
       title: "Static review: ASP.NET Core endpoint",
-      description: "Review for auth, model binding, and thread-blocking. Static discussion only.",
+      description: `What it is: Review a minimal GET user endpoint for production readiness.
+
+Goal: Async DB I/O, First vs FirstOrDefault, 404 handling, possible sync-over-async, auth attribute missing.
+
+What to do: Suggest ToListAsync patterns, NotFound(), cancellation token, authorize policy.
+
+Finish when: Bullet list of issues + improved signature/body.`,
       starterCode: `[HttpGet("{id}")]\npublic async Task<ActionResult<UserDto>> GetUser(int id)\n{\n    var user = _db.Users.First(u => u.Id == id);\n    return Ok(new UserDto(user.Name, user.Email));\n}`,
       language: "csharp",
       difficulty: "senior",
@@ -495,7 +705,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-cs-2",
       title: "Static review: EF Core query",
-      description: "Identify N+1 or tracking issues. Propose `Include`, projection, or `AsNoTracking` as appropriate.",
+      description: `What it is: Loading orders then customers in a loop—classic N+1 with EF.
+
+Goal: Eager load (Include), projection (Select), or split query; tracking vs AsNoTracking for reads.
+
+What to do: Rewrite to one round-trip or explain explicit loading trade-offs.
+
+Finish when: Before/after query strategy clear.`,
       starterCode: `var orders = await _db.Orders.ToListAsync();\nforeach (var o in orders)\n{\n    o.Customer = await _db.Customers.FirstAsync(c => c.Id == o.CustomerId);\n}`,
       language: "csharp",
       difficulty: "mid",
@@ -505,7 +721,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-cs-3",
       title: ".NET: idempotent webhook handler (sketch)",
-      description: "Outline how you would process incoming webhooks safely (dedupe key, retries). Pseudocode / comments only.",
+      description: `What it is: Payment provider hits your URL multiple times—must not double-charge.
+
+Goal: Idempotency key in payload, store processed event IDs, return 200 on replay with same outcome.
+
+What to do: Pseudocode: DB unique on (provider, eventId), transaction, signature verification placeholder.
+
+Finish when: Retry-safe flow + at-least-once delivery discussion.`,
       starterCode: `// POST /webhooks/payment — outline idempotency and persistence\n`,
       language: "csharp",
       difficulty: "senior",
@@ -515,7 +737,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-react-1",
       title: "Static review: stale state in React",
-      description: "Explain the bug and fix using hooks correctly. No runtime.",
+      description: `What it is: useEffect with [] deps but uses q—search never updates.
+
+Goal: Correct dependency array; optional debounce; abort in-flight fetch.
+
+What to do: Fix effect deps; mention eslint exhaustive-deps; race if response order differs.
+
+Finish when: Correct hook pattern written or explained.`,
       starterCode: `function SearchBox() {\n  const [q, setQ] = useState("");\n  const [results, setResults] = useState([]);\n  useEffect(() => {\n    fetch("/api/search?q=" + q).then((r) => r.json()).then(setResults);\n  }, []);\n  return <input value={q} onChange={(e) => setQ(e.target.value)} />;\n}`,
       language: "typescript",
       difficulty: "senior",
@@ -525,7 +753,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-react-2",
       title: "Static review: memoization trap",
-      description: "Discuss whether `useMemo`/`useCallback` help here and what to change.",
+      description: `What it is: useMemo around sort that mutates items in place.
+
+Goal: sort mutates props; memo may not help; copy before sort or sort in render with stable deps.
+
+What to do: Explain referential equality vs mutated array; prefer [...items].sort or useMemo on copied array.
+
+Finish when: Bug named + idiomatic fix.`,
       starterCode: `function Dashboard({ items }: { items: Item[] }) {\n  const sorted = useMemo(() => items.sort((a, b) => a.score - b.score), [items]);\n  return <List data={sorted} />;\n}`,
       language: "typescript",
       difficulty: "mid",
@@ -535,7 +769,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-fs-react-3",
       title: "React: controlled form with API errors",
-      description: "Sketch a form that shows field-level errors from a 400 JSON response. Focus on state shape — minimal JSX.",
+      description: `What it is: Map ASP.NET validation problem details (or similar 400 JSON) to field errors in React.
+
+Goal: State shape: values + fieldErrors + submit loading; parse errors.errors or equivalent.
+
+What to do: Sketch onSubmit with fetch, set errors from body, disable double submit.
+
+Finish when: Clear state interface + handler steps.`,
       starterCode: `// State + submit handler sketch for React + fetch to ASP.NET validation problem details\n`,
       language: "typescript",
       difficulty: "mid",
@@ -547,7 +787,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-an-1",
       title: "Repository Pattern",
-      description: "Implement a Repository class that fetches data from a remote API with local Room database caching. Handle loading, success, and error states.",
+      description: `What it is: Single place for data access combining remote API + local Room cache.
+
+Goal: Offline-friendly reads; refresh path; map DTO ↔ entity; single source of truth for UI.
+
+What to do: Implement UserRepository(api, dao) with suspend functions; emit Loading/Success/Error (Flow or callback).
+
+Finish when: Describe conflict resolution if remote and local diverge.`,
       starterCode: "class UserRepository(\n  private val api: UserApi,\n  private val dao: UserDao\n) {\n  // Implement\n}",
       language: "kotlin",
       difficulty: "mid",
@@ -555,7 +801,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-an-2",
       title: "Compose LazyColumn with Pagination",
-      description: "Build a Jetpack Compose screen that displays a paginated list using LazyColumn. Load the next page when the user scrolls near the end.",
+      description: `What it is: Paginated infinite list in Jetpack Compose.
+
+Goal: Load next page when user nears end; avoid duplicate requests; show loading footer.
+
+What to do: PaginatedList(viewModel) with LazyColumn, rememberLazyListState, LaunchedEffect or Paging library sketch.
+
+Finish when: Error retry and empty state mentioned.`,
       starterCode: "@Composable\nfun PaginatedList(viewModel: ListViewModel) {\n  // Implement\n}",
       language: "kotlin",
       difficulty: "senior",
@@ -565,7 +817,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-io-1",
       title: "Network Layer with async/await",
-      description: "Implement a generic network layer using Swift async/await. It should handle request building, response decoding, and error handling.",
+      description: `What it is: Reusable async client for Decodable responses with typed errors.
+
+Goal: Build URLRequest, await data, decode JSON, map URLError/HTTP 4xx to app errors.
+
+What to do: Implement NetworkClient.request<T: Decodable>(_ endpoint: Endpoint) async throws -> T.
+
+Finish when: Cancellation and decoding failure paths covered.`,
       starterCode: "class NetworkClient {\n  func request<T: Decodable>(_ endpoint: Endpoint) async throws -> T {\n    // Implement\n  }\n}",
       language: "swift",
       difficulty: "mid",
@@ -573,7 +831,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-io-2",
       title: "SwiftUI List with Search",
-      description: "Create a SwiftUI view that displays a filterable list of items. Implement a search bar that filters results as the user types.",
+      description: `What it is: Filter-as-you-type list UI in SwiftUI.
+
+Goal: @State searchText; computed filtered array; List performance basics.
+
+What to do: SearchableList with TextField + List; case-insensitive filter; empty state.
+
+Finish when: Mention debounce if API-backed search.`,
       starterCode: "struct SearchableList: View {\n  @State private var searchText = \"\"\n  \n  var body: some View {\n    // Implement\n  }\n}",
       language: "swift",
       difficulty: "mid",
@@ -583,7 +847,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-qa-1",
       title: "Write Test Cases for Login",
-      description: "Write comprehensive test cases for a login page. Cover happy path, edge cases, security, and accessibility. Use any framework you prefer.",
+      description: `What it is: Document executable scenarios for a login page (manual or automation-ready).
+
+Goal: Cover success, validation, lockout, remember-me, password reset link, a11y basics.
+
+What to do: In describe/it or table form: preconditions, steps, expected result per case.
+
+Finish when: Security-adjacent cases (SQLi/XSS in fields) and keyboard/screen reader called out.`,
       starterCode: "describe('Login Page', () => {\n  // Write test cases\n});",
       language: "javascript",
       difficulty: "mid",
@@ -591,7 +861,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-qa-2",
       title: "API Test Suite",
-      description: "Write automated tests for a REST API endpoint (GET /users/:id). Test status codes, response schema, error handling, and edge cases.",
+      description: `What it is: Automated checks for GET /users/:id (or similar).
+
+Goal: Contract: status codes, JSON schema, error body, auth, 404 vs 400.
+
+What to do: Tests for happy path, invalid id, unauthorized, rate limit if applicable.
+
+Finish when: Assertions on headers/content-type and stable test data strategy.`,
       starterCode: "describe('GET /users/:id', () => {\n  // Write API tests\n});",
       language: "javascript",
       difficulty: "mid",
@@ -599,7 +875,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-qa-s1",
       title: "Static review: flaky selector",
-      description: "Do not run. Why might this fail intermittently? Propose stable selectors and waits.",
+      description: `What it is: E2E snippet that often flakes—review only.
+
+Goal: Fragile CSS, missing wait for network, toast race.
+
+What to do: Prefer role/name queries, web-first assertions, wait for response or stable locator.
+
+Finish when: Concrete selector + wait strategy.`,
       starterCode: `await page.click(".btn-primary");\nawait expect(page.locator(".toast")).toContainText("Saved");`,
       language: "javascript",
       difficulty: "mid",
@@ -608,7 +890,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-qa-s2",
       title: "Gherkin: password reset",
-      description: "Write Given/When/Then scenarios for password reset including errors and rate limiting (no execution).",
+      description: `What it is: BDD scenarios for password reset flow.
+
+Goal: Happy path, invalid token, expired link, rate limit, email enumeration caution.
+
+What to do: Write Feature + multiple Scenarios with Given/When/Then.
+
+Finish when: At least one negative path + security-minded expectation.`,
       starterCode: `Feature: Password reset\n  Scenario: ???\n`,
       language: "markdown",
       difficulty: "junior",
@@ -617,7 +905,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-qa-s3",
       title: "Test plan checklist",
-      description: "Fill in risks, scope, environments, and exit criteria for releasing a payment webhook integration.",
+      description: `What it is: Lightweight test plan for payment webhooks going to prod.
+
+Goal: Scope, environments, data, risks, entry/exit criteria, rollback.
+
+What to do: Fill headings: what’s in/out of scope, dependencies, who signs off.
+
+Finish when: Exit criteria measurable (e.g. zero sev-1 bugs, load test pass).`,
       starterCode: `## Test plan: payment webhooks\n- Scope:\n- Risks:\n- Data / fixtures:\n- Exit criteria:\n`,
       language: "markdown",
       difficulty: "senior",
@@ -626,7 +920,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-qa-s4",
       title: "Static review: contract test",
-      description: "Discuss gaps: versioning, negative cases, and provider-driven vs consumer-driven flow.",
+      description: `What it is: Consumer-driven contract example—find coverage gaps.
+
+Goal: Missing error states, versioning, provider state setup, auth headers.
+
+What to do: List what’s not asserted; add negative scenario ideas.
+
+Finish when: Stronger pact or schema test outline.`,
       starterCode: `pact\n  .given("user exists")\n  .uponReceiving("a request for user")\n  .withRequest({ method: "GET", path: "/user/1" })\n  .willRespondWith({ status: 200, body: { name: "A" } });`,
       language: "javascript",
       difficulty: "senior",
@@ -635,7 +935,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-qa-3",
       title: "Boundary cases (table)",
-      description: "For a numeric field 'age' (0–120), list equivalence classes and boundary values to test. Markdown table is fine.",
+      description: `What it is: Test design for numeric age field 0–120.
+
+Goal: Equivalence classes + boundary values (0, 120, -1, 121, non-integer).
+
+What to do: Complete markdown table: class → representative values → expected.
+
+Finish when: Table covers invalid types/strings if UI allows.`,
       starterCode: `| Class | Values to test |\n|-------|----------------|\n`,
       language: "markdown",
       difficulty: "junior",
@@ -646,7 +952,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-do-1",
       title: "Dockerfile for Node.js App",
-      description: "Write a multi-stage Dockerfile for a Node.js application. Optimize for production with minimal image size, proper caching, and security.",
+      description: `What it is: Production-oriented container build for a Node service.
+
+Goal: Multi-stage build: deps → build → slim runtime; non-root user; small attack surface.
+
+What to do: Stage 1 npm ci --omit=dev; copy only needed artifacts; final FROM alpine/distroless; USER directive.
+
+Finish when: Explain layer caching order and why secrets must not be in ENV at build.`,
       starterCode: "# Write your Dockerfile\n# Requirements:\n# - Multi-stage build\n# - Non-root user\n# - Minimal final image\n",
       language: "docker",
       difficulty: "mid",
@@ -654,7 +966,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-do-2",
       title: "GitHub Actions CI Pipeline",
-      description: "Write a GitHub Actions workflow that runs tests, builds a Docker image, and deploys to staging on merge to main.",
+      description: `What it is: CI workflow on push/merge to main.
+
+Goal: Lint/test → build image → push to registry → deploy staging (or trigger).
+
+What to do: Jobs with needs:, cache, secrets via GH Actions; tag image with sha.
+
+Finish when: Branch protection assumptions + rollback idea.`,
       starterCode: "# .github/workflows/ci.yml\nname: CI/CD Pipeline\non:\n  push:\n    branches: [main]\n\njobs:\n  # Define jobs\n",
       language: "yaml",
       difficulty: "mid",
@@ -662,7 +980,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-do-s1",
       title: "Static review: Dockerfile security",
-      description: "Do not build. List issues (user, secrets, tags, layers) and safer alternatives.",
+      description: `What it is: Review a naive Dockerfile—no docker build required.
+
+Goal: latest tag, root user, secrets in image, npm install vs ci, layer bloat.
+
+What to do: List each smell; suggest pinned digest, multi-stage, BuildKit secrets.
+
+Finish when: Hardened outline.`,
       starterCode: `FROM node:latest\nCOPY . /app\nWORKDIR /app\nRUN npm install\nENV API_KEY=sk_live_xxx\nCMD ["node", "server.js"]\n`,
       language: "docker",
       difficulty: "mid",
@@ -671,7 +995,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-do-s2",
       title: "Static review: Kubernetes manifest",
-      description: "Do not apply. Find security, probes, and resource problems.",
+      description: `What it is: Deployment YAML review—don’t apply to a cluster.
+
+Goal: Missing resources, probes, image pull policy, plaintext secrets in env, single replica.
+
+What to do: Add requests/limits, liveness/readiness, Secret refs, pod security context.
+
+Finish when: Priority-ordered fixes.`,
       starterCode: `apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api\nspec:\n  template:\n    spec:\n      containers:\n        - name: api\n          image: myregistry/api\n          env:\n            - name: DATABASE_URL\n              value: postgres://user:pass@db:5432/app\n`,
       language: "yaml",
       difficulty: "senior",
@@ -680,7 +1010,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-do-s3",
       title: "Static review: Terraform",
-      description: "Discuss least privilege, state, and sensitive values.",
+      description: `What it is: Infra snippet exposing a public bucket—review.
+
+Goal: Principle of least privilege, state file security, sensitive outputs.
+
+What to do: Private bucket, block public access, encryption, IAM tighten.
+
+Finish when: Safer resource sketch + state remote backend note.`,
       starterCode: `resource "aws_s3_bucket" "logs" {\n  bucket = "company-logs-public"\n  acl    = "public-read"\n}\n`,
       language: "hcl",
       difficulty: "senior",
@@ -689,7 +1025,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-do-s4",
       title: "Static review: Helm values",
-      description: "Identify misconfigurations for prod (replicas, probes, image tags).",
+      description: `What it is: values.yaml that’s risky for production.
+
+Goal: latest tag, single replica, no resources, missing probes.
+
+What to do: Pin versioned tag, scale, probes, resources, PDB mention.
+
+Finish when: Checklist of prod-ready changes.`,
       starterCode: `replicaCount: 1\nimage:\n  repository: myapp\n  tag: latest\nresources: {}\n`,
       language: "yaml",
       difficulty: "mid",
@@ -698,7 +1040,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-do-3",
       title: "Incident timeline (dry run)",
-      description: "Outline Slack + paging steps for 'API latency SLO burn'. No tools — checklist only.",
+      description: `What it is: Runbook-style response for latency SLO burn—no live incident.
+
+Goal: Detect → triage → mitigate → communicate → postmortem hook.
+
+What to do: Numbered steps: check dashboards, recent deploy, rollback/canary, status page, war room.
+
+Finish when: Roles (who pages whom) and when to escalate.`,
       starterCode: `# Incident: elevated latency\n1. \n2. \n3. \n`,
       language: "markdown",
       difficulty: "lead",
@@ -709,7 +1057,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-de-1",
       title: "SQL Window Functions",
-      description: "Write a SQL query that ranks employees by salary within each department, shows the running total of salaries, and identifies the top earner per department.",
+      description: `What it is: Analytical SQL using windows (rank, sum over partition).
+
+Goal: Rank salary within department; running total; flag top earner per dept.
+
+What to do: Single query with PARTITION BY department ORDER BY salary; ROW_NUMBER or RANK; SUM() OVER.
+
+Finish when: Correct ties handling explained (RANK vs ROW_NUMBER).`,
       starterCode: "-- Table: employees (id, name, department, salary, hire_date)\n-- Write your query\n",
       language: "sql",
       difficulty: "mid",
@@ -717,7 +1071,13 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
     {
       id: "ct-de-2",
       title: "Data Pipeline Transform",
-      description: "Write a Python function that transforms raw JSON event data into a clean, normalized format suitable for a data warehouse. Handle missing fields and type coercion.",
+      description: `What it is: Python normalisation of messy JSON events for the warehouse.
+
+Goal: Coerce types, default missing keys, drop/flag bad records, stable schema.
+
+What to do: Implement transform_events(raw_events) → list[dict] with validation and logging hooks.
+
+Finish when: Example input/output pair in comments.`,
       starterCode: "def transform_events(raw_events: list[dict]) -> list[dict]:\n    # Implement\n    pass",
       language: "python",
       difficulty: "mid",
