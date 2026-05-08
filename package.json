@@ -29,7 +29,6 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
-    "y-monaco": "^0.1.6",
     "y-partykit": "^0.0.33",
     "yjs": "^13.6.30",
     "zustand": "^5.0.12"

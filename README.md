@@ -2,6 +2,8 @@
 
 AI-powered technical interview assistant with a live code editor, intelligent interview agent, real-time collaboration, audio transcription, and automated review generation.
 
+**Live (production):** [interview-copilot-ecru.vercel.app](https://interview-copilot-ecru.vercel.app) — see [Deployment](#deployment) for PartyKit, dashboard links, and env vars.
+
 ## Features
 
 - **Interview Setup** — Configure role, difficulty level, topics, and candidate name
@@ -84,6 +86,23 @@ This app has **two backends** that need to be deployed separately:
 
 You must deploy PartyKit **first** so you know its hostname before configuring Vercel.
 
+### Where to find the live app
+
+| What | URL or value |
+|------|----------------|
+| **Production site (main alias)** | [https://interview-copilot-ecru.vercel.app](https://interview-copilot-ecru.vercel.app) |
+| **Start an interview** | [https://interview-copilot-ecru.vercel.app/interview](https://interview-copilot-ecru.vercel.app/interview) |
+| **Create a take-home task** | [https://interview-copilot-ecru.vercel.app/task/new](https://interview-copilot-ecru.vercel.app/task/new) |
+| **Vercel project (dashboard, env vars, logs)** | [https://vercel.com/jovancvetkovic3006s-projects/interview-copilot](https://vercel.com/jovancvetkovic3006s-projects/interview-copilot) |
+| **PartyKit project (WebSocket + HTTP parties)** | `https://interview-copilot.jovancvetkovic3006.partykit.dev` |
+| **`NEXT_PUBLIC_PARTYKIT_HOST` (Vercel)** | `interview-copilot.jovancvetkovic3006.partykit.dev` (no `https://`) |
+
+Each production deploy also gets a unique URL like `https://interview-copilot-<hash>-jovancvetkovic3006s-projects.vercel.app`; the **ecru** alias above tracks the latest production deployment. Preview deploys from `npm run deploy:preview` get their own URLs in the CLI output.
+
+**GitHub → Vercel:** If `vercel link` reports that connecting the GitHub repo failed, open the Vercel project → **Settings → Git** and connect `jovancvetkovic3006/interview-copilot` manually (install the Vercel GitHub app if prompted).
+
+**Secrets:** Never commit `ANTHROPIC_API_KEY`. Set it only in Vercel **Settings → Environment Variables** (Production). If a key is ever exposed (e.g. pasted in chat), rotate it in the [Anthropic console](https://console.anthropic.com/) and update Vercel, then redeploy (`npm run deploy`).
+
 ### 1. Deploy PartyKit
 
 ```bash
@@ -122,14 +141,14 @@ In **Project → Settings → Environment Variables** (Production scope), add:
 
 | Name | Example value | Notes |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | `sk-ant-api03-…` | A **freshly rotated** key from console.anthropic.com. Server-only, never exposed to the browser. |
-| `NEXT_PUBLIC_PARTYKIT_HOST` | `interview-copilot.<your-username>.partykit.dev` | The hostname printed by `npm run deploy:party`. The `NEXT_PUBLIC_` prefix is required so the browser can reach the realtime server. |
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-…` | A **freshly rotated** key from [console.anthropic.com](https://console.anthropic.com). Server-only, never exposed to the browser. |
+| `NEXT_PUBLIC_PARTYKIT_HOST` | `interview-copilot.jovancvetkovic3006.partykit.dev` | Bare hostname from `npm run deploy:party` (no `https://`). The `NEXT_PUBLIC_` prefix is required so the browser can reach the realtime server. |
 
 After adding them, **redeploy** so the build picks them up: `npm run deploy` again, or click "Redeploy" in the dashboard.
 
 ### Verify
 
-1. Open the Vercel URL → `/interview` → "Start New Interview" → you land on `/interview/CODE`.
+1. Open the [production site](https://interview-copilot-ecru.vercel.app) → `/interview` → "Start New Interview" → you land on `/interview/CODE`.
 2. Open the candidate link in another browser/incognito → both tabs should show each other in the participant list (PartyKit working).
 3. Type in the shared editor → text propagates live (Yjs over PartyKit working).
 4. Send a chat message → AI responds (Anthropic key working).

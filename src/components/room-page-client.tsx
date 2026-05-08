@@ -895,6 +895,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               taskTitle={(codingTask as { title?: string })?.title}
               taskDescription={(codingTask as { description?: string })?.description}
               starterCode={(codingTask as { starterCode?: string })?.starterCode}
+              collaborationTaskId={(codingTask as { collaborationTaskId?: string })?.collaborationTaskId}
               taskSource={
                 (codingTask as { source?: string } | null)?.source === "pre-interview-task"
                   ? "pre-interview-task"
@@ -1327,6 +1328,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             taskTitle={(codingTask as { title?: string })?.title}
             taskDescription={(codingTask as { description?: string })?.description}
             starterCode={(codingTask as { starterCode?: string })?.starterCode}
+            collaborationTaskId={(codingTask as { collaborationTaskId?: string })?.collaborationTaskId}
             taskSource={
               (codingTask as { source?: string } | null)?.source === "pre-interview-task"
                 ? "pre-interview-task"

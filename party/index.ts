@@ -59,6 +59,15 @@ interface RoomState {
   hostParticipantId: string | null;
 }
 
+/** Server-issued id so every client joins the same Yjs sub-room (hashing description caused drift). */
+function assignCollaborationTaskId(task: unknown): unknown {
+  const collaborationTaskId = crypto.randomUUID();
+  if (task !== null && typeof task === "object" && !Array.isArray(task)) {
+    return { ...(task as Record<string, unknown>), collaborationTaskId };
+  }
+  return task;
+}
+
 export default class InterviewRoom implements Party.Server {
   constructor(readonly room: Party.Room) {}
 
@@ -235,8 +244,11 @@ export default class InterviewRoom implements Party.Server {
       }
 
       case "coding-task": {
-        this.state.codingTask = data.task;
-        this.room.broadcast(JSON.stringify(data), [sender.id]);
+        const task = assignCollaborationTaskId(data.task);
+        this.state.codingTask = task;
+        // Include the sender so their client gets the same `collaborationTaskId` as everyone else
+        // (otherwise interviewer and candidate would use different Yjs room names).
+        this.room.broadcast(JSON.stringify({ type: "coding-task", task } satisfies RoomMessage));
         break;
       }
 

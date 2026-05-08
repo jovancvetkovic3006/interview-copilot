@@ -3,7 +3,7 @@
 import React, { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import * as Y from "yjs";
-// y-monaco and y-partykit/provider are imported dynamically in handleEditorMount
+// y-partykit/provider and collaborative-monaco-binding are imported dynamically in handleEditorMount
 // because they access `window` at module level, which breaks SSR.
 import { Badge } from "@/components/ui/badge";
 import { Code2, FileCode, Users } from "lucide-react";
@@ -47,6 +47,8 @@ interface CollaborativeEditorProps {
   taskTitle?: string;
   taskDescription?: string;
   starterCode?: string;
+  /** When set (server-issued), all clients use this for the Yjs PartyKit room suffix. */
+  collaborationTaskId?: string;
   /**
    * Origin of the current task. `"pre-interview-task"` means the buffer was preloaded with the
    * candidate's take-home submission; we add a small banner so it's clear we're not starting from
@@ -99,14 +101,13 @@ function buildStarterContent(task: { title: string; description: string; starter
   return lines.join("\n");
 }
 
-/** Stable id so each assigned task gets its own Yjs room (re-assign = fresh doc + one seed). */
-function codingTaskRoomSuffix(
-  title: string,
-  language: string,
-  description: string,
-  starterCode?: string
-): string {
-  const s = `${title}\0${language}\0${description}\0${starterCode ?? ""}`;
+/**
+ * Legacy fallback when `collaborationTaskId` is missing (old server or in-flight assign).
+ * Do not include `description` — long or slightly divergent text between clients split them into
+ * different Yjs rooms and corrupted the interviewer's view.
+ */
+function codingTaskRoomSuffixLegacy(title: string, language: string, starterCode?: string): string {
+  const s = `${title}\0${language}\0${starterCode ?? ""}`;
   let h = 5381;
   for (let i = 0; i < s.length; i++) {
     h = Math.imul(h, 33) ^ s.charCodeAt(i);
@@ -125,6 +126,7 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
       taskTitle,
       taskDescription,
       starterCode,
+      collaborationTaskId,
       taskSource,
     },
     ref
@@ -168,19 +170,15 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
 
   const taskRoomSuffix = useMemo(() => {
     if (!taskTitle) return "";
-    return codingTaskRoomSuffix(
-      taskTitle,
-      language,
-      taskDescription ?? "",
-      starterCode
-    );
-  }, [taskTitle, language, taskDescription, starterCode]);
+    if (collaborationTaskId) return collaborationTaskId;
+    return codingTaskRoomSuffixLegacy(taskTitle, language, starterCode);
+  }, [taskTitle, language, starterCode, collaborationTaskId]);
 
   useEffect(() => {
     return () => {
       for (const t of seedKickTimersRef.current) clearTimeout(t);
       seedKickTimersRef.current = [];
-      // MonacoBinding is destroyed by y-monaco when the model disposes (Editor unmount).
+      // CollaborativeMonacoBinding is destroyed when the model disposes (Editor unmount).
       bindingRef.current = null;
       trySeedRef.current = null;
 
@@ -219,8 +217,8 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
     editorRef.current = editorInstance;
 
     // Dynamic imports to avoid SSR "window is not defined" errors
-    const [{ MonacoBinding }, YPartyKitProviderModule] = await Promise.all([
-      import("y-monaco"),
+    const [{ CollaborativeMonacoBinding }, YPartyKitProviderModule] = await Promise.all([
+      import("@/lib/collaborative-monaco-binding"),
       import("y-partykit/provider"),
     ]);
     if (mountGen !== editorMountGenerationRef.current) return;
@@ -286,7 +284,9 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
     const model = editorInstance.getModel();
     const attachBinding = () => {
       if (!model || bindingRef.current) return;
-      bindingRef.current = new MonacoBinding(
+      // Y.Text is always LF; CRLF in the model breaks offset ↔ position mapping (especially on Windows).
+      model.setEOL(monaco.editor.EndOfLineSequence.LF);
+      bindingRef.current = new CollaborativeMonacoBinding(
         ytext,
         model,
         new Set([editorInstance]),

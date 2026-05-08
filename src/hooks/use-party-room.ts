@@ -182,7 +182,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
 
   const sendCodingTask = useCallback((task: unknown) => {
     if (!socketRef.current) return;
-    setCodingTask(task);
+    // State updates from the server's broadcast only so `collaborationTaskId` matches all clients.
     socketRef.current.send(JSON.stringify({ type: "coding-task", task } satisfies RoomMessage));
   }, []);
 
