@@ -73,12 +73,22 @@ Your job:
 - If there is no substantive candidate answer, set answerQuality to "n/a" and score 0 with a brief summary explaining why.
 - Otherwise rate how strong the (spoken) answer appears: depth, clarity, relevance, and technical correctness where applicable.
 - Be concise and fair; transcript may be imperfect.
+- Suggest up to **3 short, specific follow-up questions** the interviewer could ask next to dig
+  deeper, probe weak spots, or verify claims. Each question should:
+    * Be one sentence, ≤ ~20 words.
+    * Build directly on something the candidate just said, not generic ("Tell me about a project…").
+    * Stay relevant to the role/topics above.
+  If answerQuality is "n/a" (small talk / silence / interviewer-only), return an empty array.
+
+LANGUAGE: The transcript may be in Serbian (Cyrillic or Latin), English, or a mix. **Always write
+"summary" and every entry in "followUpQuestions" in English** even if the source is Serbian.
 
 Respond with ONLY valid JSON (no markdown):
 {
   "summary": "<2-4 sentences for the interviewer>",
   "score": <integer 1-10, or 0 if n/a>,
-  "answerQuality": "<one of: strong, adequate, weak, insufficient, n/a>"
+  "answerQuality": "<one of: strong, adequate, weak, insufficient, n/a>",
+  "followUpQuestions": ["<question 1>", "<question 2>", "<question 3>"]
 }`;
 
     const userContent = `RECENT TYPED CHAT (for question context):\n${chatBlock}\n\nSPOKEN TRANSCRIPT WINDOW:\n${transcriptWindow}`;
@@ -96,9 +106,14 @@ Respond with ONLY valid JSON (no markdown):
     if (text.startsWith("```")) {
       text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
     }
-    let json: { summary: string; score: number; answerQuality: string };
+    let json: {
+      summary: string;
+      score: number;
+      answerQuality: string;
+      followUpQuestions?: unknown;
+    };
     try {
-      json = JSON.parse(text) as { summary: string; score: number; answerQuality: string };
+      json = JSON.parse(text) as typeof json;
     } catch {
       return NextResponse.json({ error: "Invalid model response" }, { status: 500 });
     }
@@ -107,10 +122,22 @@ Respond with ONLY valid JSON (no markdown):
     const answerQuality = allowed.has(json.answerQuality) ? json.answerQuality : "n/a";
     const score = typeof json.score === "number" && json.score >= 0 && json.score <= 10 ? json.score : 0;
 
+    const followUpQuestions =
+      answerQuality === "n/a"
+        ? []
+        : Array.isArray(json.followUpQuestions)
+          ? json.followUpQuestions
+              .filter((q): q is string => typeof q === "string")
+              .map((q) => q.trim())
+              .filter((q) => q.length > 0 && q.length <= 240)
+              .slice(0, 3)
+          : [];
+
     return NextResponse.json({
       summary: typeof json.summary === "string" ? json.summary : "",
       score,
       answerQuality,
+      followUpQuestions,
     });
   } catch (error: unknown) {
     console.error("analyze-transcript error:", error);

@@ -63,6 +63,11 @@ Primary candidate: ${candidateName || "the candidate"}.
 The transcript was captured by browser speech-to-text and may contain recognition errors.
 Mark uncertain interpretations with "(unclear)". Do NOT invent facts not supported by the transcript.
 
+LANGUAGE: The transcript may be in Serbian (Cyrillic or Latin), English, or a mix.
+**Write the entire summary in English.** When you include a direct candidate quote that was not
+spoken in English, present the original quote followed by an English translation in brackets, e.g.
+> "Originalna recenica." [English: "Original sentence."]
+
 Produce a concise, structured **Markdown** summary with these sections (in this order):
 
 ## Overview

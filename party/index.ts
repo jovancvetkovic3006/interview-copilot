@@ -8,6 +8,8 @@ interface TranscriptAnalysisEntry {
   summary: string;
   score: number;
   answerQuality: "strong" | "adequate" | "weak" | "insufficient" | "n/a";
+  /** Optional follow-up questions for the interviewer (interviewer-only). */
+  followUpQuestions?: string[];
 }
 
 export type RoomMessage =

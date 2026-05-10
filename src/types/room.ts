@@ -33,6 +33,12 @@ export interface TranscriptAnalysisEntry {
   summary: string;
   score: number;
   answerQuality: "strong" | "adequate" | "weak" | "insufficient" | "n/a";
+  /**
+   * Up to ~3 short suggested follow-up questions for the interviewer to ask next, based on what the
+   * candidate just said. Empty (or omitted) when the analyzed window had no substantive answer.
+   * Always in English regardless of the spoken language.
+   */
+  followUpQuestions?: string[];
 }
 
 /** Post-interview summary generated once per room (shared via PartyKit). */

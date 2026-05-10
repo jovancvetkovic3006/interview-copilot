@@ -101,6 +101,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const [showTasksPanel, setShowTasksPanel] = useState(true);
   const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | "cv" | null>("questions");
   const [reportGenerating, setReportGenerating] = useState(false);
+  /** Per-follow-up "copied!" feedback keyed by `${analysisId}::${questionIdx}`. */
+  const [copiedFollowUpKey, setCopiedFollowUpKey] = useState<string | null>(null);
+  const copiedFollowUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const greetingSentRef = useRef(false);
 
@@ -199,6 +202,12 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   }, [transcript, messages]);
 
   useEffect(() => {
+    return () => {
+      if (copiedFollowUpTimerRef.current) clearTimeout(copiedFollowUpTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     lastAnalyzedTranscriptLenRef.current = 0;
   }, [roomCode]);
 
@@ -285,6 +294,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           summary?: string;
           score?: number;
           answerQuality?: string;
+          followUpQuestions?: unknown;
         };
         if (!res.ok || data.error || typeof data.summary !== "string") return;
 
@@ -294,6 +304,13 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           : "n/a";
         const score =
           typeof data.score === "number" && data.score >= 0 && data.score <= 10 ? data.score : 0;
+        const followUpQuestions = Array.isArray(data.followUpQuestions)
+          ? data.followUpQuestions
+              .filter((q): q is string => typeof q === "string")
+              .map((q) => q.trim())
+              .filter((q) => q.length > 0)
+              .slice(0, 3)
+          : [];
         const endLen = transcriptLiveRef.current.length;
 
         sendTranscriptAnalysis({
@@ -303,6 +320,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           summary: data.summary,
           score,
           answerQuality,
+          followUpQuestions,
         });
         lastAnalyzedTranscriptLenRef.current = endLen;
       } catch (e) {
@@ -1110,7 +1128,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             <div className="flex-1 min-h-[72px] max-h-[28vh] overflow-y-auto p-3 space-y-2">
               {transcriptAnalyses.length === 0 && !analysisBusy ? (
                 <p className="text-xs text-violet-800/75 dark:text-violet-200/75 italic leading-relaxed">
-                  When the host records, recent speech is analyzed here (summary, score, answer quality) to help you steer the interview.
+                  When the host records, recent speech is analyzed here (summary, score, answer quality, plus suggested follow-up questions) to help you steer the interview.
                 </p>
               ) : (
                 transcriptAnalyses.slice(-8).map((a) => (
@@ -1131,6 +1149,52 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       <span className="text-[10px] text-zinc-400 ml-auto">{new Date(a.timestamp).toLocaleTimeString()}</span>
                     </div>
                     <p className="text-zinc-700 dark:text-zinc-300 leading-relaxed">{a.summary}</p>
+                    {a.followUpQuestions && a.followUpQuestions.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-violet-100 dark:border-violet-900/60">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-1">
+                          Suggested follow-ups
+                        </div>
+                        <ul className="space-y-1">
+                          {a.followUpQuestions.map((q, i) => {
+                            const key = `${a.id}::${i}`;
+                            const copied = copiedFollowUpKey === key;
+                            return (
+                              <li key={key}>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(q);
+                                      if (copiedFollowUpTimerRef.current) {
+                                        clearTimeout(copiedFollowUpTimerRef.current);
+                                      }
+                                      setCopiedFollowUpKey(key);
+                                      copiedFollowUpTimerRef.current = setTimeout(
+                                        () => setCopiedFollowUpKey(null),
+                                        1500
+                                      );
+                                    } catch {
+                                      /* clipboard API unavailable — silent */
+                                    }
+                                  }}
+                                  className="group w-full text-left flex items-start gap-1.5 rounded px-1.5 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors"
+                                  title="Click to copy this follow-up question"
+                                >
+                                  <span className="flex-1 text-zinc-700 dark:text-zinc-200 leading-snug">
+                                    {q}
+                                  </span>
+                                  {copied ? (
+                                    <Check className="h-3 w-3 mt-0.5 shrink-0 text-green-600" />
+                                  ) : (
+                                    <Copy className="h-3 w-3 mt-0.5 shrink-0 text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  )}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ))
               )}

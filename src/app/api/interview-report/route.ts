@@ -207,13 +207,18 @@ Write a structured **Markdown** report suitable for PDF export. Include:
 6. Recommended decision hint (hire / no-hire / more rounds) — phrased as guidance for humans, not a command
 7. Optional: timeline table if useful
 
+LANGUAGE: The transcript / chat may be in Serbian (Cyrillic or Latin), English, or a mix.
+**Write the entire report in English regardless of the source language.** When citing a candidate
+quote that was not spoken in English, include the original line followed by an English translation
+in brackets, e.g. > "Originalna recenica." [English: "Original sentence."]
+
 Tone: professional, concise, fair. Do not invent facts not supported by the materials.
 Output **only** Markdown (no JSON wrapper, no code fences around the whole document).`;
 
     const client = getAnthropicClient();
     const completion = await createMessageWithFallback(client, {
       system:
-        "You produce interview close-out documentation for internal hiring use only. Output Markdown only.",
+        "You produce interview close-out documentation for internal hiring use only. Output Markdown only. Always write the report in English even if the source materials are in Serbian or another language.",
       messages: [{ role: "user", content: userContent }],
       temperature: 0.35,
       max_tokens: 6000,

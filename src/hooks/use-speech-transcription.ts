@@ -15,7 +15,9 @@ interface UseSpeechTranscriptionOptions {
 }
 
 export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = {}) {
-  const { onTranscript, language = "en-US" } = options;
+  // Default to Serbian (sr-RS) — most live interviews here are in Serbian. Override via prop for
+  // English / other-language sessions; downstream AI prompts produce English regardless.
+  const { onTranscript, language = "sr-RS" } = options;
   const [isRecording, setIsRecording] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   /** Shown when the browser STT hits a recoverable error (e.g. cloud `network`). */
