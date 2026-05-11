@@ -8,6 +8,12 @@ import { useCallback, useState } from "react";
 import type { InterviewReport } from "@/types/room";
 import { downloadInterviewPdf } from "@/lib/interview-pdf";
 
+type SessionNotesGateProps = {
+  value: string;
+  onChange: (v: string) => void;
+  minLength: number;
+};
+
 type Props = {
   roomCode: string;
   report: InterviewReport | null;
@@ -15,9 +21,21 @@ type Props = {
   role: "interviewer" | "candidate";
   /** Shown when the interviewer is in review but no report is in room state yet (e.g. refresh). */
   onRetryReport?: () => void;
+  /**
+   * When set, the host must fill notes before retrying report generation (no usable transcript).
+   * Notes are not synced to the candidate.
+   */
+  sessionNotesGate?: SessionNotesGateProps;
 };
 
-export function InterviewReviewPanel({ roomCode, report, generating, role, onRetryReport }: Props) {
+export function InterviewReviewPanel({
+  roomCode,
+  report,
+  generating,
+  role,
+  onRetryReport,
+  sessionNotesGate,
+}: Props) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -80,8 +98,42 @@ export function InterviewReviewPanel({ roomCode, report, generating, role, onRet
               <p className="text-sm text-amber-800 dark:text-amber-200">
                 No summary is stored for this interview yet (for example after a refresh before generation finished).
               </p>
+              {sessionNotesGate && (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 p-3 space-y-1.5">
+                  <label className="text-xs font-medium text-amber-950 dark:text-amber-100">
+                    Session notes for the AI report
+                    <span className="font-normal text-amber-900/90 dark:text-amber-200/90">
+                      {" "}
+                      — required (no live transcript). At least {sessionNotesGate.minLength} characters.
+                    </span>
+                  </label>
+                  <textarea
+                    value={sessionNotesGate.value}
+                    onChange={(e) => sessionNotesGate.onChange(e.target.value)}
+                    placeholder="Summarize what was discussed, candidate strengths/gaps, and your impressions…"
+                    rows={4}
+                    className="w-full text-sm rounded-md border border-amber-200/90 dark:border-amber-800/80 bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  />
+                  {sessionNotesGate.value.trim().length < sessionNotesGate.minLength && (
+                    <p className="text-[10px] text-amber-800 dark:text-amber-300">
+                      {sessionNotesGate.minLength - sessionNotesGate.value.trim().length} more characters needed.
+                    </p>
+                  )}
+                </div>
+              )}
               {onRetryReport && (
-                <Button type="button" variant="secondary" size="sm" onClick={onRetryReport}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={onRetryReport}
+                  disabled={
+                    Boolean(
+                      sessionNotesGate &&
+                        sessionNotesGate.value.trim().length < sessionNotesGate.minLength
+                    )
+                  }
+                >
                   Generate report
                 </Button>
               )}

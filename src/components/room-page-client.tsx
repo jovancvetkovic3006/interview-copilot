@@ -17,6 +17,10 @@ import { InterviewReviewPanel } from "@/components/interview-review";
 import { AgentMessage } from "@/components/agent-message";
 import { CvSuggestionsPanel } from "@/components/cv-suggestions-panel";
 import {
+  hasUsableTranscript,
+  MIN_INTERVIEWER_SESSION_NOTES_CHARS,
+} from "@/lib/interview-report-gate";
+import {
   Users,
   Wifi,
   WifiOff,
@@ -101,6 +105,35 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const [showTasksPanel, setShowTasksPanel] = useState(true);
   const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | "cv" | null>("questions");
   const [reportGenerating, setReportGenerating] = useState(false);
+  const sessionNotesStorageKey = `ic-session-review-notes-${roomCode}`;
+  const [sessionReviewNotes, setSessionReviewNotes] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        setSessionReviewNotes(sessionStorage.getItem(sessionNotesStorageKey) ?? "");
+      } catch {
+        setSessionReviewNotes("");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionNotesStorageKey]);
+
+  const setSessionReviewNotesPersisted = useCallback(
+    (v: string) => {
+      setSessionReviewNotes(v);
+      try {
+        sessionStorage.setItem(sessionNotesStorageKey, v);
+      } catch {
+        /* ignore quota / private mode */
+      }
+    },
+    [sessionNotesStorageKey]
+  );
   /** Per-follow-up "copied!" feedback keyed by `${analysisId}::${questionIdx}`. */
   const [copiedFollowUpKey, setCopiedFollowUpKey] = useState<string | null>(null);
   const copiedFollowUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,6 +175,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
    * and PartyKit broadcasts it to other interviewers — so deriving avoids a redundant local mirror.
    */
   const roomConfig = (sharedConfig as InterviewConfig | null) ?? null;
+
+  const reportNeedsSessionNotes = !hasUsableTranscript(transcript);
 
   const resolveAgentApiConfig = useCallback(
     (cfg: InterviewConfig | null) => {
@@ -555,6 +590,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   }, [participant, sendChat]);
 
   const runReportGeneration = useCallback(async () => {
+    if (
+      reportNeedsSessionNotes &&
+      sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS
+    ) {
+      window.alert(
+        `No live transcript was captured. Add session notes for the final report (at least ${MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters) — what you discussed and your impressions — then try again.`
+      );
+      return;
+    }
     setReportGenerating(true);
     try {
       // Snapshot the live shared editor so the report sees the candidate's actual final code
@@ -579,6 +623,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           config: roomConfig,
           codingTask,
           finalCode,
+          interviewerSessionNotes: sessionReviewNotes.trim() || undefined,
         }),
       });
       const data = (await res.json()) as { error?: string; markdown?: string };
@@ -600,6 +645,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       setReportGenerating(false);
     }
   }, [
+    reportNeedsSessionNotes,
+    sessionReviewNotes,
     roomCode,
     participants,
     messages,
@@ -619,12 +666,30 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     ) {
       return;
     }
+    if (
+      reportNeedsSessionNotes &&
+      sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS
+    ) {
+      window.alert(
+        `No live transcript was captured. Add session notes for the final report first (at least ${MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters) — scroll up to the yellow "Session notes" box.`
+      );
+      return;
+    }
     if (isRecording) stopRecording();
     sendPhase("review");
     setStep("review");
     if (interviewReport) return;
     await runReportGeneration();
-  }, [isHost, sendPhase, interviewReport, runReportGeneration, isRecording, stopRecording]);
+  }, [
+    isHost,
+    sendPhase,
+    interviewReport,
+    runReportGeneration,
+    isRecording,
+    stopRecording,
+    reportNeedsSessionNotes,
+    sessionReviewNotes,
+  ]);
 
   // ─── Step 1: Join ──────────────────────────────────────────────
   if (activeStep === "join") {
@@ -764,6 +829,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         generating={reportGenerating}
         role={participant?.role ?? "interviewer"}
         onRetryReport={isHost ? runReportGeneration : undefined}
+        sessionNotesGate={
+          isHost && reportNeedsSessionNotes
+            ? {
+                value: sessionReviewNotes,
+                onChange: setSessionReviewNotesPersisted,
+                minLength: MIN_INTERVIEWER_SESSION_NOTES_CHARS,
+              }
+            : undefined
+        }
       />
     );
   }
@@ -1053,8 +1127,17 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               size="sm"
               className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50"
               onClick={handleEndInterview}
-              disabled={reportGenerating}
-              title="End interview and generate AI summary for everyone"
+              disabled={
+                reportGenerating ||
+                (reportNeedsSessionNotes &&
+                  sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS)
+              }
+              title={
+                reportNeedsSessionNotes &&
+                sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS
+                  ? `Add session notes (at least ${MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters) — no live transcript was captured`
+                  : "End interview and generate AI summary for everyone"
+              }
             >
               <StopCircle className="h-3.5 w-3.5" />
               End interview
@@ -1086,6 +1169,40 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           )}
         </div>
       </div>
+
+      {isHost && phase === "interview" && (
+        <div className="shrink-0 border-b border-amber-200/80 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-4 py-2">
+          <label className="text-xs font-medium text-amber-950 dark:text-amber-100 block mb-1">
+            Session notes for final AI report
+            {reportNeedsSessionNotes ? (
+              <span className="font-normal text-amber-900/90 dark:text-amber-200/90">
+                {" "}
+                — required when Record was not used (min. {MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters)
+              </span>
+            ) : (
+              <span className="font-normal text-zinc-600 dark:text-zinc-400">
+                {" "}
+                — optional; adds context on top of the live transcript
+              </span>
+            )}
+          </label>
+          <textarea
+            value={sessionReviewNotes}
+            onChange={(e) => setSessionReviewNotesPersisted(e.target.value)}
+            placeholder="E.g. topics covered, how the candidate handled system design, concerns, strengths…"
+            rows={3}
+            className="w-full text-xs rounded-md border border-amber-200/90 dark:border-amber-800/80 bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40 max-h-32"
+          />
+          {reportNeedsSessionNotes &&
+            sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS && (
+              <p className="text-[10px] text-amber-800 dark:text-amber-300 mt-1">
+                Need at least{" "}
+                {MIN_INTERVIEWER_SESSION_NOTES_CHARS - sessionReviewNotes.trim().length} more
+                characters before you can end the interview and generate the report.
+              </p>
+            )}
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <div className="w-95 min-w-80 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0">
