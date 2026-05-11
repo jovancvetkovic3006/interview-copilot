@@ -1,0 +1,26 @@
+role: Android Developer
+questions:
+  - id: an-1
+    question: Explain the Android Activity lifecycle and how you handle configuration changes.
+    category: Android SDK
+  - id: an-2
+    question: Compare Jetpack Compose with XML layouts. When would you choose one over the other?
+    category: UI
+  - id: an-3
+    question: How do you handle background tasks in Android?
+    category: Android SDK
+  - id: an-4
+    question: Explain MVVM architecture and how you implement it in Android apps.
+    category: Architecture
+  - id: an-5
+    question: How do you manage dependency injection in Android? Compare Hilt vs Koin.
+    category: Architecture
+  - id: an-6
+    question: Explain Kotlin coroutines and Flow. How do you handle error cases?
+    category: Kotlin
+  - id: an-7
+    question: How do you handle offline-first architecture in mobile apps?
+    category: Architecture
+  - id: an-8
+    question: What is your approach to testing Android applications?
+    category: Testing

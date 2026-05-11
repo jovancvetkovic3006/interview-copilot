@@ -1,0 +1,239 @@
+role: Full Stack Developer
+tasks:
+  - id: ct-fs-1
+    title: TODO API + UI
+    description: >-
+      What it is: End-to-end design for a minimal TODO feature—REST shape and persistence sketch.
+
+
+      Goal: Show you can define resources, HTTP verbs, status codes, and a simple data model (id,
+      title, done, timestamps).
+
+
+      What to do: Outline GET/POST/PUT/DELETE routes, request/response JSON, validation rules, and
+      id generation.
+
+
+      Finish when: Happy path + at least one error case (404, 400) described; optional note on auth.
+    starterCode: |
+      // Define routes and handlers
+      // GET /todos
+      // POST /todos
+      // PUT /todos/:id
+      // DELETE /todos/:id
+    language: javascript
+    difficulty: mid
+    strand: fullstack
+  - id: ct-fs-2
+    title: Middleware Chain
+    description: >-
+      What it is: Mini framework—compose functions that run in order around a fake req/res.
+
+
+      Goal: use(fn) registers middleware; execute runs the chain; each calls next() or ends the
+      response.
+
+
+      What to do: Implement MiddlewareChain with use and execute; handle errors bubbling or
+      try/catch convention.
+
+
+      Finish when: Demo order: logging → auth stub → handler.
+    starterCode: |-
+      class MiddlewareChain {
+        constructor() {
+          this.middlewares = [];
+        }
+        use(fn) {
+          // Implement
+        }
+        execute(req, res) {
+          // Implement
+        }
+      }
+    language: javascript
+    difficulty: senior
+    strand: fullstack
+  - id: ct-fs-s1
+    title: 'Static review: duplicate validation'
+    description: >-
+      What it is: Client vs server validation mismatch review.
+
+
+      Goal: Client-only checks are bypassable; server must enforce schema, length, and authz.
+
+
+      What to do: List gaps (email check, password rules, SQL injection); show server-side
+      validation + hashing for passwords.
+
+
+      Finish when: Threat + minimum server checks written.
+    starterCode: |-
+      // Client
+      if (form.email.includes("@")) submit(form);
+
+      // Server
+      app.post("/register", (req, res) => {
+        db.insert({ email: req.body.email, password: req.body.password });
+      });
+    language: javascript
+    difficulty: mid
+    staticReview: true
+    strand: fullstack
+  - id: ct-fs-s2
+    title: 'Static review: cookie session'
+    description: >-
+      What it is: Session cookie set from server—security review.
+
+
+      Goal: HttpOnly alone is insufficient; need Secure, SameSite, path, CSRF token for
+      state-changing requests, rotation.
+
+
+      What to do: Explain CSRF with cookie auth; when to use SameSite=strict/lax; double-submit or
+      CSRF header.
+
+
+      Finish when: Hardened cookie options + CSRF strategy.
+    starterCode: 'res.cookie("session", token, { httpOnly: true });'
+    language: javascript
+    difficulty: senior
+    staticReview: true
+    strand: fullstack
+  - id: ct-fs-cs-1
+    title: 'Static review: ASP.NET Core endpoint'
+    description: >-
+      What it is: Review a minimal GET user endpoint for production readiness.
+
+
+      Goal: Async DB I/O, First vs FirstOrDefault, 404 handling, possible sync-over-async, auth
+      attribute missing.
+
+
+      What to do: Suggest ToListAsync patterns, NotFound(), cancellation token, authorize policy.
+
+
+      Finish when: Bullet list of issues + improved signature/body.
+    starterCode: |-
+      [HttpGet("{id}")]
+      public async Task<ActionResult<UserDto>> GetUser(int id)
+      {
+          var user = _db.Users.First(u => u.Id == id);
+          return Ok(new UserDto(user.Name, user.Email));
+      }
+    language: csharp
+    difficulty: senior
+    staticReview: true
+    strand: backend
+  - id: ct-fs-cs-2
+    title: 'Static review: EF Core query'
+    description: >-
+      What it is: Loading orders then customers in a loop—classic N+1 with EF.
+
+
+      Goal: Eager load (Include), projection (Select), or split query; tracking vs AsNoTracking for
+      reads.
+
+
+      What to do: Rewrite to one round-trip or explain explicit loading trade-offs.
+
+
+      Finish when: Before/after query strategy clear.
+    starterCode: |-
+      var orders = await _db.Orders.ToListAsync();
+      foreach (var o in orders)
+      {
+          o.Customer = await _db.Customers.FirstAsync(c => c.Id == o.CustomerId);
+      }
+    language: csharp
+    difficulty: mid
+    staticReview: true
+    strand: backend
+  - id: ct-fs-cs-3
+    title: '.NET: idempotent webhook handler (sketch)'
+    description: >-
+      What it is: Payment provider hits your URL multiple times—must not double-charge.
+
+
+      Goal: Idempotency key in payload, store processed event IDs, return 200 on replay with same
+      outcome.
+
+
+      What to do: Pseudocode: DB unique on (provider, eventId), transaction, signature verification
+      placeholder.
+
+
+      Finish when: Retry-safe flow + at-least-once delivery discussion.
+    starterCode: |
+      // POST /webhooks/payment — outline idempotency and persistence
+    language: csharp
+    difficulty: senior
+    staticReview: true
+    strand: backend
+  - id: ct-fs-react-1
+    title: 'Static review: stale state in React'
+    description: |-
+      What it is: useEffect with [] deps but uses q—search never updates.
+
+      Goal: Correct dependency array; optional debounce; abort in-flight fetch.
+
+      What to do: Fix effect deps; mention eslint exhaustive-deps; race if response order differs.
+
+      Finish when: Correct hook pattern written or explained.
+    starterCode: |-
+      function SearchBox() {
+        const [q, setQ] = useState("");
+        const [results, setResults] = useState([]);
+        useEffect(() => {
+          fetch("/api/search?q=" + q).then((r) => r.json()).then(setResults);
+        }, []);
+        return <input value={q} onChange={(e) => setQ(e.target.value)} />;
+      }
+    language: typescript
+    difficulty: senior
+    staticReview: true
+    strand: frontend
+  - id: ct-fs-react-2
+    title: 'Static review: memoization trap'
+    description: >-
+      What it is: useMemo around sort that mutates items in place.
+
+
+      Goal: sort mutates props; memo may not help; copy before sort or sort in render with stable
+      deps.
+
+
+      What to do: Explain referential equality vs mutated array; prefer [...items].sort or useMemo
+      on copied array.
+
+
+      Finish when: Bug named + idiomatic fix.
+    starterCode: |-
+      function Dashboard({ items }: { items: Item[] }) {
+        const sorted = useMemo(() => items.sort((a, b) => a.score - b.score), [items]);
+        return <List data={sorted} />;
+      }
+    language: typescript
+    difficulty: mid
+    staticReview: true
+    strand: frontend
+  - id: ct-fs-react-3
+    title: 'React: controlled form with API errors'
+    description: >-
+      What it is: Map ASP.NET validation problem details (or similar 400 JSON) to field errors in
+      React.
+
+
+      Goal: State shape: values + fieldErrors + submit loading; parse errors.errors or equivalent.
+
+
+      What to do: Sketch onSubmit with fetch, set errors from body, disable double submit.
+
+
+      Finish when: Clear state interface + handler steps.
+    starterCode: |
+      // State + submit handler sketch for React + fetch to ASP.NET validation problem details
+    language: typescript
+    difficulty: mid
+    staticReview: true
+    strand: frontend

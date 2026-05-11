@@ -1,0 +1,117 @@
+role: Backend Developer
+questions:
+  - id: be-1
+    question: Explain RESTful API design principles and best practices.
+    category: APIs
+  - id: be-2
+    question: How do you handle database indexing and query optimization?
+    category: Databases
+  - id: be-3
+    question: Explain the difference between SQL and NoSQL databases. When would you use each?
+    category: Databases
+  - id: be-4
+    question: How do you implement authentication and authorization in a web application?
+    category: Security
+  - id: be-5
+    question: Describe microservices architecture and its trade-offs vs monoliths.
+    category: Architecture
+  - id: be-6
+    question: How do you handle caching? Explain cache invalidation strategies.
+    category: Performance
+  - id: be-7
+    question: Explain the CAP theorem and its implications for distributed systems.
+    category: Architecture
+  - id: be-8
+    question: How do you handle error handling and logging in production systems?
+    category: Operations
+  - id: be-9
+    question: What is your approach to API versioning?
+    category: APIs
+  - id: be-10
+    question: How do you design for horizontal scalability?
+    category: Architecture
+  - id: be-j1
+    question: What is the difference between authentication and authorization?
+    category: Security
+    levels:
+      - junior
+  - id: be-j2
+    question: Name common HTTP status codes. When would you return 400 vs 422 vs 409?
+    category: HTTP
+    levels:
+      - junior
+  - id: be-j3
+    question: What is a primary key and a foreign key? Why are they important?
+    category: Databases
+    levels:
+      - junior
+  - id: be-j4
+    question: What is an ORM and what problems does it solve? What are its downsides?
+    category: Databases
+    levels:
+      - junior
+  - id: be-m1
+    question: Explain database transactions and ACID. When would you wrap operations in a transaction?
+    category: Databases
+    levels:
+      - mid
+  - id: be-m2
+    question: Compare offset/limit pagination with cursor-based pagination. When is each appropriate?
+    category: APIs
+    levels:
+      - mid
+  - id: be-m3
+    question: What is idempotency for HTTP POST, and how do you implement it in practice?
+    category: APIs
+    levels:
+      - mid
+  - id: be-m4
+    question: How does connection pooling work? What failure modes have you seen?
+    category: Databases
+    levels:
+      - mid
+  - id: be-m5
+    question: Explain the N+1 query problem and how ORMs expose you to it.
+    category: Databases
+    levels:
+      - mid
+  - id: be-m6
+    question: How do you safely handle user-controlled strings when building SQL or shell commands?
+    category: Security
+    levels:
+      - mid
+  - id: be-s1
+    question: Describe the transactional outbox pattern for reliable cross-service messaging.
+    category: Messaging
+    levels:
+      - senior
+  - id: be-s2
+    question: How do you run backward-compatible schema migrations with zero downtime?
+    category: Databases
+    levels:
+      - senior
+  - id: be-s3
+    question: Compare at-least-once, at-most-once, and exactly-once semantics in distributed systems.
+    category: Distributed systems
+    levels:
+      - senior
+  - id: be-s4
+    question: How would you design rate limiting and fair usage for a public API at scale?
+    category: APIs
+    levels:
+      - senior
+  - id: be-s5
+    question: Explain sagas vs two-phase commit for distributed transactions. When would you pick one?
+    category: Distributed systems
+    levels:
+      - senior
+  - id: be-l1
+    question: How do you approach multi-tenant data isolation (row-level, schema-per-tenant, DB-per-tenant)?
+    category: Architecture
+    levels:
+      - lead
+  - id: be-l2
+    question: How do you govern API design and versioning across many autonomous teams?
+    category: Leadership
+    levels:
+      - lead

@@ -1,0 +1,164 @@
+role: Backend Developer
+tasks:
+  - id: ct-be-1
+    title: Rate Limiter
+    description: >-
+      What it is: Per-client request cap over a sliding or fixed time window (API protection).
+
+
+      Goal: Implement RateLimiter(maxRequests, windowMs) with isAllowed(clientId) returning boolean.
+
+
+      What to do: Track timestamps per client; evict old entries; define behavior when limit
+      exceeded.
+
+
+      Finish when: Explain complexity and why this is approximate vs distributed rate limiting.
+    starterCode: |-
+      class RateLimiter {
+        constructor(maxRequests, windowMs) {
+          // Implement
+        }
+        isAllowed(clientId) {
+          // Implement
+        }
+      }
+    language: javascript
+    difficulty: senior
+  - id: ct-be-2
+    title: LRU Cache
+    description: |-
+      What it is: Fixed-capacity cache evicting the least recently used entry on overflow.
+
+      Goal: get and put in O(1) average time (hash map + doubly linked list or ordered map).
+
+      What to do: Implement LRUCache(capacity); get updates recency; put evicts LRU if full.
+
+      Finish when: Walk through evict path on paper for capacity=2.
+    starterCode: |-
+      class LRUCache {
+        constructor(capacity) {
+          // Implement
+        }
+        get(key) {
+          // Implement
+        }
+        put(key, value) {
+          // Implement
+        }
+      }
+    language: javascript
+    difficulty: senior
+  - id: ct-be-3
+    title: Parse Query String
+    description: >-
+      What it is: Convert "?a=1&b=2&b=3" into a structured object (arrays for repeated keys).
+
+
+      Goal: Correct decoding, bracket notation for nesting if you support it (document rules).
+
+
+      What to do: Implement parseQueryString(queryString) without relying on URLSearchParams if you
+      want the exercise; handle empty and leading ?.
+
+
+      Finish when: Examples covered: repeated keys → array, encoded values.
+    starterCode: |-
+      function parseQueryString(queryString) {
+        // Implement
+      }
+    language: javascript
+    difficulty: mid
+  - id: ct-be-s1
+    title: 'Static review: N+1 queries'
+    description: |-
+      What it is: ORM/service loop issuing one query per row.
+
+      Goal: Name the pattern and batch or join.
+
+      What to do: Sketch single query with JOIN or IN (...) or DataLoader-style batch.
+
+      Finish when: Before/after query count explained.
+    starterCode: |-
+      for (const order of orders) {
+        const customer = await db.query("SELECT * FROM customers WHERE id = ?", order.customer_id);
+        order.customer = customer;
+      }
+    language: javascript
+    difficulty: mid
+    staticReview: true
+  - id: ct-be-s2
+    title: 'Static review: JWT middleware'
+    description: |-
+      What it is: Broken “auth” that decodes JWT payload without verification.
+
+      Goal: List crypto/signature, alg, secret, audience, expiry, and header parsing issues.
+
+      What to do: Describe proper verify step with library; reject none alg; use HTTPS.
+
+      Finish when: Attack scenarios + hardened middleware outline.
+    starterCode: |-
+      function auth(req, res, next) {
+        const token = req.headers.authorization.split(" ")[1];
+        const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64"));
+        req.user = payload;
+        next();
+      }
+    language: javascript
+    difficulty: senior
+    staticReview: true
+  - id: ct-be-s3
+    title: 'Static review: Go error handling'
+    description: |-
+      What it is: Handler ignoring errors and leaking partial reads.
+
+      Goal: Check every error return; defer Close; validate JSON; status codes.
+
+      What to do: Rewrite with proper if err != nil, http.Error, limited body reader.
+
+      Finish when: Concrete fix list.
+    starterCode: "func Handle(w http.ResponseWriter, r *http.Request) {\n\tbody, _ := ioutil.ReadAll(r.Body)\n\tjson.Unmarshal(body, &payload)\n\tw.Write([]byte(\"ok\"))\n}"
+    language: go
+    difficulty: mid
+    staticReview: true
+  - id: ct-be-s4
+    title: 'Static review: isolation levels'
+    description: |-
+      What it is: Transaction snippet—what anomalies can other sessions see?
+
+      Goal: Relate isolation level to dirty read / non-repeatable read / phantom.
+
+      What to do: State default level for your DB; suggest SERIALIZABLE or locks if needed.
+
+      Finish when: Scenario-based explanation.
+    starterCode: |-
+      -- Session A
+      BEGIN;
+      SELECT balance FROM accounts WHERE id = 1;
+      -- ... later UPDATE ...
+      COMMIT;
+    language: sql
+    difficulty: senior
+    staticReview: true
+  - id: ct-be-4
+    title: Idempotent POST sketch
+    description: >-
+      What it is: Design payment/transfer POST safe under retries and double-clicks.
+
+
+      Goal: Idempotency key, unique constraint, return same response on replay.
+
+
+      What to do: Pseudocode: store key → result; begin transaction; insert or return cached
+      outcome.
+
+
+      Finish when: Client responsibility (sending key) + server storage clear.
+    starterCode: |-
+      // POST /transfers — body: { idempotencyKey, from, to, amount }
+      function handleTransfer(req) {
+        // Outline only
+      }
+    language: javascript
+    difficulty: senior
+    staticReview: true

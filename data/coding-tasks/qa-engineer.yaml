@@ -1,0 +1,128 @@
+role: QA Engineer
+tasks:
+  - id: ct-qa-1
+    title: Write Test Cases for Login
+    description: >-
+      What it is: Document executable scenarios for a login page (manual or automation-ready).
+
+
+      Goal: Cover success, validation, lockout, remember-me, password reset link, a11y basics.
+
+
+      What to do: In describe/it or table form: preconditions, steps, expected result per case.
+
+
+      Finish when: Security-adjacent cases (SQLi/XSS in fields) and keyboard/screen reader called
+      out.
+    starterCode: |-
+      describe('Login Page', () => {
+        // Write test cases
+      });
+    language: javascript
+    difficulty: mid
+  - id: ct-qa-2
+    title: API Test Suite
+    description: |-
+      What it is: Automated checks for GET /users/:id (or similar).
+
+      Goal: Contract: status codes, JSON schema, error body, auth, 404 vs 400.
+
+      What to do: Tests for happy path, invalid id, unauthorized, rate limit if applicable.
+
+      Finish when: Assertions on headers/content-type and stable test data strategy.
+    starterCode: |-
+      describe('GET /users/:id', () => {
+        // Write API tests
+      });
+    language: javascript
+    difficulty: mid
+  - id: ct-qa-s1
+    title: 'Static review: flaky selector'
+    description: >-
+      What it is: E2E snippet that often flakes—review only.
+
+
+      Goal: Fragile CSS, missing wait for network, toast race.
+
+
+      What to do: Prefer role/name queries, web-first assertions, wait for response or stable
+      locator.
+
+
+      Finish when: Concrete selector + wait strategy.
+    starterCode: |-
+      await page.click(".btn-primary");
+      await expect(page.locator(".toast")).toContainText("Saved");
+    language: javascript
+    difficulty: mid
+    staticReview: true
+  - id: ct-qa-s2
+    title: 'Gherkin: password reset'
+    description: |-
+      What it is: BDD scenarios for password reset flow.
+
+      Goal: Happy path, invalid token, expired link, rate limit, email enumeration caution.
+
+      What to do: Write Feature + multiple Scenarios with Given/When/Then.
+
+      Finish when: At least one negative path + security-minded expectation.
+    starterCode: |
+      Feature: Password reset
+        Scenario: ???
+    language: markdown
+    difficulty: junior
+    staticReview: true
+  - id: ct-qa-s3
+    title: Test plan checklist
+    description: |-
+      What it is: Lightweight test plan for payment webhooks going to prod.
+
+      Goal: Scope, environments, data, risks, entry/exit criteria, rollback.
+
+      What to do: Fill headings: what’s in/out of scope, dependencies, who signs off.
+
+      Finish when: Exit criteria measurable (e.g. zero sev-1 bugs, load test pass).
+    starterCode: |
+      ## Test plan: payment webhooks
+      - Scope:
+      - Risks:
+      - Data / fixtures:
+      - Exit criteria:
+    language: markdown
+    difficulty: senior
+    staticReview: true
+  - id: ct-qa-s4
+    title: 'Static review: contract test'
+    description: |-
+      What it is: Consumer-driven contract example—find coverage gaps.
+
+      Goal: Missing error states, versioning, provider state setup, auth headers.
+
+      What to do: List what’s not asserted; add negative scenario ideas.
+
+      Finish when: Stronger pact or schema test outline.
+    starterCode: |-
+      pact
+        .given("user exists")
+        .uponReceiving("a request for user")
+        .withRequest({ method: "GET", path: "/user/1" })
+        .willRespondWith({ status: 200, body: { name: "A" } });
+    language: javascript
+    difficulty: senior
+    staticReview: true
+  - id: ct-qa-3
+    title: Boundary cases (table)
+    description: |-
+      What it is: Test design for numeric age field 0–120.
+
+      Goal: Equivalence classes + boundary values (0, 120, -1, 121, non-integer).
+
+      What to do: Complete markdown table: class → representative values → expected.
+
+      Finish when: Table covers invalid types/strings if UI allows.
+    starterCode: |
+      | Class | Values to test |
+      |-------|----------------|
+    language: markdown
+    difficulty: junior
+    staticReview: true

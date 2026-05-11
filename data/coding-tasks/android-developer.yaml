@@ -1,0 +1,46 @@
+role: Android Developer
+tasks:
+  - id: ct-an-1
+    title: Repository Pattern
+    description: >-
+      What it is: Single place for data access combining remote API + local Room cache.
+
+
+      Goal: Offline-friendly reads; refresh path; map DTO ↔ entity; single source of truth for UI.
+
+
+      What to do: Implement UserRepository(api, dao) with suspend functions; emit
+      Loading/Success/Error (Flow or callback).
+
+
+      Finish when: Describe conflict resolution if remote and local diverge.
+    starterCode: |-
+      class UserRepository(
+        private val api: UserApi,
+        private val dao: UserDao
+      ) {
+        // Implement
+      }
+    language: kotlin
+    difficulty: mid
+  - id: ct-an-2
+    title: Compose LazyColumn with Pagination
+    description: >-
+      What it is: Paginated infinite list in Jetpack Compose.
+
+
+      Goal: Load next page when user nears end; avoid duplicate requests; show loading footer.
+
+
+      What to do: PaginatedList(viewModel) with LazyColumn, rememberLazyListState, LaunchedEffect or
+      Paging library sketch.
+
+
+      Finish when: Error retry and empty state mentioned.
+    starterCode: |-
+      @Composable
+      fun PaginatedList(viewModel: ListViewModel) {
+        // Implement
+      }
+    language: kotlin
+    difficulty: senior

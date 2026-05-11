@@ -1,0 +1,101 @@
+role: DevOps Engineer
+questions:
+  - id: do-1
+    question: How do you design a CI/CD pipeline from scratch?
+    category: CI/CD
+  - id: do-2
+    question: Explain container orchestration with Kubernetes. How do you handle scaling?
+    category: Kubernetes
+  - id: do-3
+    question: What is Infrastructure as Code? Compare Terraform vs CloudFormation.
+    category: IaC
+  - id: do-4
+    question: How do you implement monitoring and alerting for production systems?
+    category: Monitoring
+  - id: do-5
+    question: Explain your approach to secrets management.
+    category: Security
+  - id: do-6
+    question: How do you handle incident response? Walk me through your process.
+    category: Operations
+  - id: do-7
+    question: Explain blue-green vs canary deployments.
+    category: Deployments
+  - id: do-8
+    question: How do you manage multi-environment configurations?
+    category: Operations
+  - id: do-j1
+    question: What is the difference between a container image and a running container?
+    category: Containers
+    levels:
+      - junior
+  - id: do-j2
+    question: What is continuous integration vs continuous delivery vs continuous deployment?
+    category: CI/CD
+    levels:
+      - junior
+  - id: do-j3
+    question: Why is environment parity between dev/staging/prod important?
+    category: Operations
+    levels:
+      - junior
+  - id: do-j4
+    question: What is a reverse proxy and why might you put one in front of an app?
+    category: Networking
+    levels:
+      - junior
+  - id: do-m1
+    question: Explain Kubernetes liveness vs readiness probes and when each should fail.
+    category: Kubernetes
+    levels:
+      - mid
+  - id: do-m2
+    question: What problems does Infrastructure as Code solve? What are common anti-patterns?
+    category: IaC
+    levels:
+      - mid
+  - id: do-m3
+    question: How should secrets be injected into workloads? What must never be committed to git?
+    category: Security
+    levels:
+      - mid
+  - id: do-m4
+    question: Compare blue-green, canary, and rolling deployments for risk and rollback.
+    category: Deployments
+    levels:
+      - mid
+  - id: do-m5
+    question: What is a service mesh and what operational problems does it address?
+    category: Kubernetes
+    levels:
+      - mid
+  - id: do-s1
+    question: How do you define SLIs, SLOs, and error budgets for a user-facing service?
+    category: Reliability
+    levels:
+      - senior
+  - id: do-s2
+    question: What is GitOps? When is it a good fit vs traditional push-based deploys?
+    category: GitOps
+    levels:
+      - senior
+  - id: do-s3
+    question: Walk through how you would triage elevated 5xx rates right after a deployment.
+    category: Incidents
+    levels:
+      - senior
+  - id: do-s4
+    question: How do you secure a Kubernetes cluster (RBAC, network policies, pod security)?
+    category: Security
+    levels:
+      - senior
+  - id: do-l1
+    question: How would you design disaster recovery with explicit RTO/RPO targets?
+    category: Leadership
+    levels:
+      - lead
+  - id: do-l2
+    question: How do you give teams cloud cost visibility and drive optimization without slowing them down?
+    category: FinOps
+    levels:
+      - lead

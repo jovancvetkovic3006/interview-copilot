@@ -1,0 +1,41 @@
+role: Data Engineer
+tasks:
+  - id: ct-de-1
+    title: SQL Window Functions
+    description: >-
+      What it is: Analytical SQL using windows (rank, sum over partition).
+
+
+      Goal: Rank salary within department; running total; flag top earner per dept.
+
+
+      What to do: Single query with PARTITION BY department ORDER BY salary; ROW_NUMBER or RANK;
+      SUM() OVER.
+
+
+      Finish when: Correct ties handling explained (RANK vs ROW_NUMBER).
+    starterCode: |
+      -- Table: employees (id, name, department, salary, hire_date)
+      -- Write your query
+    language: sql
+    difficulty: mid
+  - id: ct-de-2
+    title: Data Pipeline Transform
+    description: >-
+      What it is: Python normalisation of messy JSON events for the warehouse.
+
+
+      Goal: Coerce types, default missing keys, drop/flag bad records, stable schema.
+
+
+      What to do: Implement transform_events(raw_events) → list[dict] with validation and logging
+      hooks.
+
+
+      Finish when: Example input/output pair in comments.
+    starterCode: |-
+      def transform_events(raw_events: list[dict]) -> list[dict]:
+          # Implement
+          pass
+    language: python
+    difficulty: mid

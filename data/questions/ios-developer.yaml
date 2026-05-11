@@ -1,0 +1,26 @@
+role: iOS Developer
+questions:
+  - id: io-1
+    question: Explain the difference between value types and reference types in Swift.
+    category: Swift
+  - id: io-2
+    question: How does ARC work in Swift? How do you prevent retain cycles?
+    category: Memory
+  - id: io-3
+    question: Compare SwiftUI and UIKit. When would you use each?
+    category: UI
+  - id: io-4
+    question: Explain the Combine framework and how you use it for reactive programming.
+    category: Concurrency
+  - id: io-5
+    question: How do you architect large iOS applications? Describe your preferred pattern.
+    category: Architecture
+  - id: io-6
+    question: Explain Swift concurrency (async/await, actors, structured concurrency).
+    category: Concurrency
+  - id: io-7
+    question: How do you handle data persistence in iOS apps?
+    category: Data
+  - id: io-8
+    question: What is your testing strategy for iOS applications?
+    category: Testing

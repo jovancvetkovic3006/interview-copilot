@@ -1,0 +1,123 @@
+role: Frontend Developer
+questions:
+  - id: fe-1
+    question: Explain the virtual DOM and how React uses it for rendering.
+    category: React
+  - id: fe-2
+    question: What is the difference between useEffect and useLayoutEffect?
+    category: React
+  - id: fe-3
+    question: How does CSS specificity work? Give examples of specificity conflicts.
+    category: CSS
+  - id: fe-4
+    question: Explain the event loop in JavaScript and how it handles async operations.
+    category: JavaScript
+  - id: fe-5
+    question: What strategies do you use for optimizing web application performance?
+    category: Performance
+  - id: fe-6
+    question: How do you ensure accessibility in your web applications?
+    category: Accessibility
+  - id: fe-7
+    question: Explain the difference between server-side rendering and client-side rendering.
+    category: Architecture
+  - id: fe-8
+    question: What is your approach to state management in large React applications?
+    category: React
+  - id: fe-9
+    question: How do you handle error boundaries in React?
+    category: React
+  - id: fe-10
+    question: Describe your testing strategy for frontend applications.
+    category: Testing
+  - id: fe-j1
+    question: What is semantic HTML? When would you use a native `<button>` instead of a clickable `<div>`?
+    category: HTML
+    levels:
+      - junior
+  - id: fe-j2
+    question: 'Explain the CSS box model: content, padding, border, and margin.'
+    category: CSS
+    levels:
+      - junior
+  - id: fe-j3
+    question: What is the DOM? How does JavaScript interact with it?
+    category: Browser
+    levels:
+      - junior
+  - id: fe-j4
+    question: What is the difference between `let`, `const`, and `var`?
+    category: JavaScript
+    levels:
+      - junior
+  - id: fe-m1
+    question: 'Explain CORS: what triggers a preflight request, and how should a server respond?'
+    category: HTTP / Security
+    levels:
+      - mid
+  - id: fe-m2
+    question: What is layout thrashing (forced synchronous layout) and how do you avoid it?
+    category: Performance
+    levels:
+      - mid
+  - id: fe-m3
+    question: >-
+      Compare client-side routing in an SPA with traditional server-rendered navigation for SEO and
+      UX.
+    category: Architecture
+    levels:
+      - mid
+  - id: fe-m4
+    question: What are Core Web Vitals? Which metrics would you optimize first for a content-heavy site?
+    category: Performance
+    levels:
+      - mid
+  - id: fe-m5
+    question: How does TypeScript structural typing differ from nominal typing in languages like Java or C#?
+    category: TypeScript
+    levels:
+      - mid
+  - id: fe-m6
+    question: Describe how Content Security Policy (CSP) reduces XSS risk and what breaks if misconfigured.
+    category: Security
+    levels:
+      - mid
+  - id: fe-s1
+    question: What are common causes of hydration mismatch in SSR frameworks, and how do you debug them?
+    category: SSR
+    levels:
+      - senior
+  - id: fe-s2
+    question: How would you design a design-system package versioned and consumed by multiple product teams?
+    category: Architecture
+    levels:
+      - senior
+  - id: fe-s3
+    question: Compare edge rendering vs origin rendering for personalization, latency, and cacheability.
+    category: Edge / Infra
+    levels:
+      - senior
+  - id: fe-s4
+    question: >-
+      What are robust patterns for storing and refreshing auth tokens in a browser app? Compare
+      trade-offs.
+    category: Security
+    levels:
+      - senior
+  - id: fe-s5
+    question: How do you handle optimistic UI updates when the server may reject or reorder operations?
+    category: React / UX
+    levels:
+      - senior
+  - id: fe-l1
+    question: >-
+      How do you enforce performance and accessibility budgets across many frontend teams without
+      blocking delivery?
+    category: Leadership
+    levels:
+      - lead
+  - id: fe-l2
+    question: Describe a strategy for upgrading a major framework (e.g. React major) across dozens of apps.
+    category: Leadership
+    levels:
+      - lead

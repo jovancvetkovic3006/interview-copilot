@@ -1,0 +1,103 @@
+role: QA Engineer
+questions:
+  - id: qa-1
+    question: How do you create a test strategy for a new feature?
+    category: Strategy
+  - id: qa-2
+    question: Explain the testing pyramid. How do you decide the ratio of unit/integration/E2E tests?
+    category: Strategy
+  - id: qa-3
+    question: How do you handle flaky tests in your automation suite?
+    category: Automation
+  - id: qa-4
+    question: Describe your approach to API testing.
+    category: API Testing
+  - id: qa-5
+    question: How do you prioritize which bugs to fix first?
+    category: Process
+  - id: qa-6
+    question: Explain your approach to performance testing.
+    category: Performance
+  - id: qa-7
+    question: How do you integrate testing into a CI/CD pipeline?
+    category: CI/CD
+  - id: qa-8
+    question: What metrics do you track to measure test effectiveness?
+    category: Strategy
+  - id: qa-j1
+    question: What is the difference between a test case and a test scenario?
+    category: Fundamentals
+    levels:
+      - junior
+  - id: qa-j2
+    question: What should a high-quality bug report include?
+    category: Process
+    levels:
+      - junior
+  - id: qa-j3
+    question: What is regression testing and when do you run it?
+    category: Strategy
+    levels:
+      - junior
+  - id: qa-j4
+    question: What is the difference between black-box and white-box testing?
+    category: Fundamentals
+    levels:
+      - junior
+  - id: qa-m1
+    question: Explain equivalence partitioning and boundary value analysis with a concrete example.
+    category: Test design
+    levels:
+      - mid
+  - id: qa-m2
+    question: How would you test a REST endpoint that uses auth, pagination, and filtering?
+    category: API Testing
+    levels:
+      - mid
+  - id: qa-m3
+    question: What are common causes of flaky E2E tests and how do you harden a suite?
+    category: Automation
+    levels:
+      - mid
+  - id: qa-m4
+    question: Compare contract testing with broader integration tests for microservices.
+    category: Microservices
+    levels:
+      - mid
+  - id: qa-m5
+    question: How do you approach accessibility testing beyond automated axe scans?
+    category: Accessibility
+    levels:
+      - mid
+  - id: qa-s1
+    question: How would you design a test strategy for a business-critical checkout or payments flow?
+    category: Strategy
+    levels:
+      - senior
+  - id: qa-s2
+    question: How do you measure and reduce end-to-end CI time while keeping meaningful coverage?
+    category: CI/CD
+    levels:
+      - senior
+  - id: qa-s3
+    question: What is shift-left testing, and how have you influenced developers to own quality earlier?
+    category: Culture
+    levels:
+      - senior
+  - id: qa-s4
+    question: 'How do you test observability: alerts, SLOs, and incident runbooks?'
+    category: Operations
+    levels:
+      - senior
+  - id: qa-l1
+    question: >-
+      What quality gates would you enforce before a production release in a regulated or high-risk
+      domain?
+    category: Leadership
+    levels:
+      - lead
+  - id: qa-l2
+    question: How do you balance investment in automation vs exploratory testing for a growing product org?
+    category: Leadership
+    levels:
+      - lead

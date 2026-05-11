@@ -1,0 +1,200 @@
+role: Full Stack Developer
+questions:
+  - id: fs-1
+    question: How do you decide what logic belongs on the frontend vs backend?
+    category: Architecture
+    strand: fullstack
+  - id: fs-2
+    question: Explain how you would implement real-time features in a web app.
+    category: Architecture
+    strand: fullstack
+  - id: fs-3
+    question: How do you handle authentication across client and server?
+    category: Security
+    strand: fullstack
+  - id: fs-4
+    question: Describe your approach to database schema design for a new project.
+    category: Databases
+    strand: fullstack
+  - id: fs-5
+    question: How do you handle API error responses on the frontend?
+    category: APIs
+    strand: fullstack
+  - id: fs-6
+    question: What is your deployment and CI/CD workflow?
+    category: DevOps
+    strand: fullstack
+  - id: fs-7
+    question: How do you handle data validation on both client and server?
+    category: Architecture
+    strand: fullstack
+  - id: fs-8
+    question: Explain your approach to handling environment configuration.
+    category: DevOps
+    strand: fullstack
+  - id: fs-j1
+    question: What is JSON and when might you use form-encoded data instead?
+    category: APIs
+    levels:
+      - junior
+    strand: fullstack
+  - id: fs-j2
+    question: What is the difference between a 401 and a 403 response?
+    category: HTTP
+    levels:
+      - junior
+    strand: fullstack
+  - id: fs-m1
+    question: What is a Backend-for-Frontend (BFF) and when is it justified?
+    category: Architecture
+    levels:
+      - mid
+    strand: fullstack
+  - id: fs-m2
+    question: How do you prevent duplicate form submissions across client and API?
+    category: UX / APIs
+    levels:
+      - mid
+    strand: fullstack
+  - id: fs-s1
+    question: How would you propagate correlation IDs from browser to database for debugging?
+    category: Observability
+    levels:
+      - senior
+    strand: fullstack
+  - id: fs-s2
+    question: Discuss trade-offs of monorepo vs polyrepo for full-stack teams.
+    category: Engineering
+    levels:
+      - senior
+    strand: fullstack
+  - id: fs-s3
+    question: How do you configure CORS when the React SPA and ASP.NET API run on different origins?
+    category: Security
+    levels:
+      - senior
+    strand: fullstack
+  - id: fs-l1
+    question: How do you draw boundaries between platform, product, and infra ownership?
+    category: Leadership
+    levels:
+      - lead
+    strand: fullstack
+  - id: fs-be-j1
+    question: What is the difference between an ASP.NET Core Web API project and a class library?
+    category: .NET
+    levels:
+      - junior
+    strand: backend
+  - id: fs-be-j2
+    question: What is NuGet and how do you manage package versions in a .NET solution?
+    category: .NET
+    levels:
+      - junior
+    strand: backend
+  - id: fs-be-m1
+    question: 'Explain dependency injection in ASP.NET Core: Singleton vs Scoped vs Transient.'
+    category: .NET
+    levels:
+      - mid
+    strand: backend
+  - id: fs-be-m2
+    question: How do `async`/`await` work in C# on the server, and when is `ConfigureAwait(false)` relevant?
+    category: .NET
+    levels:
+      - mid
+    strand: backend
+  - id: fs-be-m3
+    question: Compare minimal APIs vs controllers in ASP.NET Core. When would you choose each?
+    category: APIs
+    levels:
+      - mid
+    strand: backend
+  - id: fs-be-s1
+    question: >-
+      How do you version and document REST APIs built with ASP.NET Core (OpenAPI, URL vs header
+      versioning)?
+    category: APIs
+    levels:
+      - senior
+    strand: backend
+  - id: fs-be-s2
+    question: Explain EF Core change tracking, `AsNoTracking`, and how N+1 queries appear in LINQ.
+    category: Databases
+    levels:
+      - senior
+    strand: backend
+  - id: fs-be-s3
+    question: How do you handle distributed caching or session affinity when scaling an ASP.NET Core API?
+    category: Architecture
+    levels:
+      - senior
+    strand: backend
+  - id: fs-be-l1
+    question: How would you design vertical slices or modular monolith boundaries in a large .NET codebase?
+    category: Architecture
+    levels:
+      - lead
+    strand: backend
+  - id: fs-fe-j1
+    question: What is JSX and how does it differ from plain HTML in the browser?
+    category: React
+    levels:
+      - junior
+    strand: frontend
+  - id: fs-fe-j2
+    question: What is the purpose of `key` on list items in React?
+    category: React
+    levels:
+      - junior
+    strand: frontend
+  - id: fs-fe-m1
+    question: Explain controlled vs uncontrolled form inputs in React.
+    category: React
+    levels:
+      - mid
+    strand: frontend
+  - id: fs-fe-m2
+    question: >-
+      How do you split code in a React app (lazy routes, dynamic imports) and what impact does it
+      have on UX?
+    category: Performance
+    levels:
+      - mid
+    strand: frontend
+  - id: fs-fe-m3
+    question: How do you manage server state vs client state when the UI talks to a REST API?
+    category: React
+    levels:
+      - mid
+    strand: frontend
+  - id: fs-fe-s1
+    question: >-
+      Compare client-side rendering, SSR, and React Server Components (or your framework’s
+      equivalent) for data-heavy pages.
+    category: Architecture
+    levels:
+      - senior
+    strand: frontend
+  - id: fs-fe-s2
+    question: How do you share API contracts or types between a C# backend and a TypeScript React client?
+    category: Tooling
+    levels:
+      - senior
+    strand: frontend
+  - id: fs-fe-s3
+    question: >-
+      How do you debug subtle stale-state or stale-closure bugs in hooks (`useEffect`,
+      `useCallback`)?
+    category: React
+    levels:
+      - senior
+    strand: frontend
+  - id: fs-fe-l1
+    question: >-
+      How do you govern component libraries, design tokens, and breaking UI changes across multiple
+      React apps?
+    category: Leadership
+    levels:
+      - lead
+    strand: frontend

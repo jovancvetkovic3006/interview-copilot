@@ -1,0 +1,151 @@
+role: DevOps Engineer
+tasks:
+  - id: ct-do-1
+    title: Dockerfile for Node.js App
+    description: >-
+      What it is: Production-oriented container build for a Node service.
+
+
+      Goal: Multi-stage build: deps → build → slim runtime; non-root user; small attack surface.
+
+
+      What to do: Stage 1 npm ci --omit=dev; copy only needed artifacts; final FROM
+      alpine/distroless; USER directive.
+
+
+      Finish when: Explain layer caching order and why secrets must not be in ENV at build.
+    starterCode: |
+      # Write your Dockerfile
+      # Requirements:
+      # - Multi-stage build
+      # - Non-root user
+      # - Minimal final image
+    language: docker
+    difficulty: mid
+  - id: ct-do-2
+    title: GitHub Actions CI Pipeline
+    description: |-
+      What it is: CI workflow on push/merge to main.
+
+      Goal: Lint/test → build image → push to registry → deploy staging (or trigger).
+
+      What to do: Jobs with needs:, cache, secrets via GH Actions; tag image with sha.
+
+      Finish when: Branch protection assumptions + rollback idea.
+    starterCode: |
+      # .github/workflows/ci.yml
+      name: CI/CD Pipeline
+      on:
+        push:
+          branches: [main]
+
+      jobs:
+        # Define jobs
+    language: yaml
+    difficulty: mid
+  - id: ct-do-s1
+    title: 'Static review: Dockerfile security'
+    description: |-
+      What it is: Review a naive Dockerfile—no docker build required.
+
+      Goal: latest tag, root user, secrets in image, npm install vs ci, layer bloat.
+
+      What to do: List each smell; suggest pinned digest, multi-stage, BuildKit secrets.
+
+      Finish when: Hardened outline.
+    starterCode: |
+      FROM node:latest
+      COPY . /app
+      WORKDIR /app
+      RUN npm install
+      ENV API_KEY=sk_live_xxx
+      CMD ["node", "server.js"]
+    language: docker
+    difficulty: mid
+    staticReview: true
+  - id: ct-do-s2
+    title: 'Static review: Kubernetes manifest'
+    description: |-
+      What it is: Deployment YAML review—don’t apply to a cluster.
+
+      Goal: Missing resources, probes, image pull policy, plaintext secrets in env, single replica.
+
+      What to do: Add requests/limits, liveness/readiness, Secret refs, pod security context.
+
+      Finish when: Priority-ordered fixes.
+    starterCode: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                image: myregistry/api
+                env:
+                  - name: DATABASE_URL
+                    value: postgres://user:pass@db:5432/app
+    language: yaml
+    difficulty: senior
+    staticReview: true
+  - id: ct-do-s3
+    title: 'Static review: Terraform'
+    description: |-
+      What it is: Infra snippet exposing a public bucket—review.
+
+      Goal: Principle of least privilege, state file security, sensitive outputs.
+
+      What to do: Private bucket, block public access, encryption, IAM tighten.
+
+      Finish when: Safer resource sketch + state remote backend note.
+    starterCode: |
+      resource "aws_s3_bucket" "logs" {
+        bucket = "company-logs-public"
+        acl    = "public-read"
+      }
+    language: hcl
+    difficulty: senior
+    staticReview: true
+  - id: ct-do-s4
+    title: 'Static review: Helm values'
+    description: |-
+      What it is: values.yaml that’s risky for production.
+
+      Goal: latest tag, single replica, no resources, missing probes.
+
+      What to do: Pin versioned tag, scale, probes, resources, PDB mention.
+
+      Finish when: Checklist of prod-ready changes.
+    starterCode: |
+      replicaCount: 1
+      image:
+        repository: myapp
+        tag: latest
+      resources: {}
+    language: yaml
+    difficulty: mid
+    staticReview: true
+  - id: ct-do-3
+    title: Incident timeline (dry run)
+    description: >-
+      What it is: Runbook-style response for latency SLO burn—no live incident.
+
+
+      Goal: Detect → triage → mitigate → communicate → postmortem hook.
+
+
+      What to do: Numbered steps: check dashboards, recent deploy, rollback/canary, status page, war
+      room.
+
+
+      Finish when: Roles (who pages whom) and when to escalate.
+    starterCode: |
+      # Incident: elevated latency
+      1. 
+      2. 
+      3. 
+    language: markdown
+    difficulty: lead
+    staticReview: true

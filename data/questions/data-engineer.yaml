@@ -1,0 +1,26 @@
+role: Data Engineer
+questions:
+  - id: de-1
+    question: Explain star schema vs snowflake schema. When would you use each?
+    category: Modeling
+  - id: de-2
+    question: How do you design an ETL pipeline for large-scale data?
+    category: ETL
+  - id: de-3
+    question: Explain the differences between batch and stream processing.
+    category: Processing
+  - id: de-4
+    question: How do you ensure data quality in your pipelines?
+    category: Quality
+  - id: de-5
+    question: Explain partitioning strategies in distributed databases.
+    category: Databases
+  - id: de-6
+    question: How do you handle schema evolution in a data warehouse?
+    category: Modeling
+  - id: de-7
+    question: What tools do you use for data pipeline orchestration?
+    category: Tools
+  - id: de-8
+    question: How do you optimize slow SQL queries?
+    category: SQL

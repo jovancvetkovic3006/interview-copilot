@@ -1,0 +1,196 @@
+role: Frontend Developer
+tasks:
+  - id: ct-fe-1
+    title: Debounced Search Input
+    description: >-
+      What it is: A controlled input that triggers search only after the user pauses typing (avoids
+      spamming the API).
+
+
+      Goal: Implement debouncing (~300ms) and optional cleanup on unmount.
+
+
+      What to do: Build DebouncedSearch({ onSearch }) so onSearch(query) runs 300ms after the last
+      keystroke; cancel pending timers on rapid typing.
+
+
+      Finish when: You can explain the timer/ref pattern and show handling of empty query and
+      unmount.
+    starterCode: |-
+      function DebouncedSearch({ onSearch }) {
+        // Implement debounced search
+      }
+    language: javascript
+    difficulty: mid
+  - id: ct-fe-2
+    title: Infinite Scroll List
+    description: >-
+      What it is: A list that loads more rows as the user nears the bottom (better than huge initial
+      fetch).
+
+
+      Goal: Use Intersection Observer (or equivalent) to detect when a sentinel enters view and call
+      fetchItems(cursor/page).
+
+
+      What to do: Implement InfiniteList({ fetchItems }) with loading/error/empty states and guard
+      against duplicate fetches.
+
+
+      Finish when: Clear loading flow and how you’d reset on filter change.
+    starterCode: |-
+      function InfiniteList({ fetchItems }) {
+        // Implement infinite scroll
+      }
+    language: javascript
+    difficulty: senior
+  - id: ct-fe-3
+    title: Flatten Nested Object
+    description: >-
+      What it is: Turn nested objects into a single flat map with dot keys (e.g. { a: { b: 1 } } → {
+      "a.b": 1 }).
+
+
+      Goal: Recursion or stack; handle arrays if you choose to (document convention).
+
+
+      What to do: Implement flattenObject(obj, prefix). Skip or stringify arrays consistently.
+
+
+      Finish when: Works on 2–3 level nesting; mention depth/cycle strategy if asked.
+    starterCode: |-
+      function flattenObject(obj, prefix = '') {
+        // Implement
+      }
+    language: javascript
+    difficulty: mid
+  - id: ct-fe-s1
+    title: 'Static review: effect dependencies'
+    description: >-
+      What it is: Hook review—stale closure / missing dependency bug.
+
+
+      Goal: Explain why results never update when query changes; fix dependency array and optional
+      abort (AbortController).
+
+
+      What to do: Walk through render/effect cycles; propose correct deps and race handling.
+
+
+      Finish when: Fixed hook or clear written explanation in editor.
+    starterCode: |-
+      function useSearch(query) {
+        const [results, setResults] = useState([]);
+        useEffect(() => {
+          fetch("/api/search?q=" + query).then((r) => r.json()).then(setResults);
+        }, []);
+        return results;
+      }
+    language: javascript
+    difficulty: mid
+    staticReview: true
+  - id: ct-fe-s2
+    title: 'Static review: list keys & a11y'
+    description: |-
+      What it is: Markup review for React lists and accessibility.
+
+      Goal: Wrong list child, clickable non-button, missing keyboard/ARIA for a selectable row.
+
+      What to do: Fix element choice (<li>, button/link), keys, roles/labels, focus outline.
+
+      Finish when: Concrete JSX improvements listed.
+    starterCode: |-
+      <ul>
+        {items.map((item) => (
+          <div onClick={() => select(item.id)}>
+            {item.label}
+          </div>
+        ))}
+      </ul>
+    language: javascript
+    difficulty: junior
+    staticReview: true
+  - id: ct-fe-s3
+    title: 'Static review: TypeScript component props'
+    description: |-
+      What it is: Props typing and null-safety in a tiny component.
+
+      Goal: user may be undefined/null—accessing user.name is unsafe.
+
+      What to do: Narrow with guards, default UI, or optional chaining; tighten Props type.
+
+      Finish when: Safe render path + accurate types sketched.
+    starterCode: |-
+      type Props = { user?: { name: string } | null };
+
+      function Welcome({ user }: Props) {
+        return <h1>Hello, {user.name.toUpperCase()}</h1>;
+      }
+    language: typescript
+    difficulty: mid
+    staticReview: true
+  - id: ct-fe-s4
+    title: 'Static review: CORS & credentials'
+    description: >-
+      What it is: Browser fetch to another origin—review security and cookie/credential rules.
+
+
+      Goal: Explain CORS, credentialed requests, and why Authorization header alone may be wrong for
+      cookie sessions.
+
+
+      What to do: Describe server headers (Access-Control-*), credentials mode, and SameSite cookies
+      if relevant.
+
+
+      Finish when: Coherent client + server fix narrative.
+    starterCode: |-
+      fetch("https://api.example.com/me", {
+        headers: { Authorization: "Bearer " + token },
+      }).then((r) => r.json());
+    language: javascript
+    difficulty: senior
+    staticReview: true
+  - id: ct-fe-s5
+    title: 'Static review: CSS layout'
+    description: |-
+      What it is: CSS that may overflow or break layout constraints.
+
+      Goal: Fixed heights vs content, overflow visible vs hidden, flex/grid basics.
+
+      What to do: Propose layout that contains content (min-height, overflow-auto, flex column).
+
+      Finish when: Clear issue list + revised rules.
+    starterCode: |-
+      .card {
+        height: 100px;
+      }
+      .card__body {
+        height: 120px;
+        overflow: visible;
+      }
+    language: css
+    difficulty: junior
+    staticReview: true
+  - id: ct-fe-4
+    title: Virtual list sketch
+    description: >-
+      What it is: Design-only—windowed rendering for very long lists (no need for a full working
+      lib).
+
+
+      Goal: Only mount DOM for visible rows; total scroll height from item count × row height.
+
+
+      What to do: Pseudocode scroll handler, start/end index from scrollTop, spacer divs for
+      off-screen height.
+
+
+      Finish when: Explain how resize/variable height would complicate things.
+    starterCode: |-
+      function VirtualList({ items, rowHeight, height }) {
+        // Pseudocode: visible range, offset, total height
+      }
+    language: javascript
+    difficulty: senior
+    staticReview: true

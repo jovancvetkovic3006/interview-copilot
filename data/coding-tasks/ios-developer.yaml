@@ -1,0 +1,44 @@
+role: iOS Developer
+tasks:
+  - id: ct-io-1
+    title: Network Layer with async/await
+    description: >-
+      What it is: Reusable async client for Decodable responses with typed errors.
+
+
+      Goal: Build URLRequest, await data, decode JSON, map URLError/HTTP 4xx to app errors.
+
+
+      What to do: Implement NetworkClient.request<T: Decodable>(_ endpoint: Endpoint) async throws
+      -> T.
+
+
+      Finish when: Cancellation and decoding failure paths covered.
+    starterCode: |-
+      class NetworkClient {
+        func request<T: Decodable>(_ endpoint: Endpoint) async throws -> T {
+          // Implement
+        }
+      }
+    language: swift
+    difficulty: mid
+  - id: ct-io-2
+    title: SwiftUI List with Search
+    description: |-
+      What it is: Filter-as-you-type list UI in SwiftUI.
+
+      Goal: @State searchText; computed filtered array; List performance basics.
+
+      What to do: SearchableList with TextField + List; case-insensitive filter; empty state.
+
+      Finish when: Mention debounce if API-backed search.
+    starterCode: |-
+      struct SearchableList: View {
+        @State private var searchText = ""
+        
+        var body: some View {
+          // Implement
+        }
+      }
+    language: swift
+    difficulty: mid

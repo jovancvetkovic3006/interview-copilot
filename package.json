@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "presets:build": "tsx scripts/build-presets.ts",
+    "predev": "npm run presets:build",
     "dev": "next dev",
     "dev:party": "npx partykit dev",
     "dev:all": "concurrently \"next dev\" \"npx partykit dev\"",
+    "prebuild": "npm run presets:build",
     "build": "next build",
     "start": "next start",
     "deploy": "vercel --prod",
@@ -35,13 +38,16 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "js-yaml": "^4.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vercel": "^53.2.0"
   }
