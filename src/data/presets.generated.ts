@@ -1510,6 +1510,118 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
       "difficulty": "junior"
     },
     {
+      "id": "ct-gen-6",
+      "title": "First Non-Repeating Character",
+      "description": "What it is: Classic string scan—find the first character that appears exactly once (order matters).\n\nGoal: Count or track occurrences; return the first letter in left-to-right order that has count 1. str contains only letters and spaces; ignore spaces or treat them as you document.\n\nWhat to do: Implement nonRepeatingCharacter(str). Example: \"agettkgaeee\" → \"k\". The string always has at least one character and at least one non-repeating character (per problem guarantee).\n\nFinish when: Walk through the example; state time/space; mention what you’d do without the guarantee.",
+      "starterCode": "function nonRepeatingCharacter(str) {\n  // Return the first character that appears exactly once in str\n}",
+      "language": "javascript",
+      "difficulty": "junior"
+    },
+    {
+      "id": "ct-gen-7",
+      "title": "Pairs That Sum to First Element",
+      "description": "What it is: Array “two sum” variant—the target is always arr[0]; pairs use elements from index 1 onward only (exclude the first element from being a summand).\n\nGoal: Find all unordered pairs (i,j) with i<j, both ≥1, such that arr[i]+arr[j] === arr[0]. Output format matters for auto-checkers: pairs as \"a,b\" comma inside pair, pairs separated by a single space, in order of the first number’s appearance in arr. If none, return \"-1\".\n\nWhat to do: Implement twoSumToFirst(arr). Example: [7, 3, 5, 2, -4, 8, 11] → \"5,2 -4,11\".\n\nFinish when: Empty pair list returns \"-1\"; duplicates in output avoided; explain O(n²) vs hash approach.",
+      "starterCode": "function twoSumToFirst(arr) {\n  // Return \"a,b c,d ...\" for all pairs summing to arr[0], or \"-1\" if none\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-gen-8",
+      "title": "Palindrome Check",
+      "description": "What it is: Decide if a string reads the same forwards and backwards, ignoring case and non-alphanumeric characters (classic interview normalization).\n\nGoal: Two pointers from ends, skip junk, compare letters.\n\nWhat to do: Implement isPalindrome(str). Document whether spaces/punctuation are ignored.\n\nFinish when: \"A man, a plan, a canal: Panama\" style cases; empty string edge case.",
+      "starterCode": "function isPalindrome(str) {\n  // Return true if str is a palindrome under your stated rules\n}",
+      "language": "javascript",
+      "difficulty": "junior"
+    },
+    {
+      "id": "ct-gen-9",
+      "title": "Anagram Check",
+      "description": "What it is: Two strings are anagrams if the same multiset of letters (ignoring case/spaces as you define).\n\nWhat to do: Implement isAnagram(a, b). Prefer O(n) character counts over sorting if you can.\n\nFinish when: Different lengths; Unicode vs ASCII—state your assumption.",
+      "starterCode": "function isAnagram(a, b) {\n  // Return true if a and b are anagrams of each other\n}",
+      "language": "javascript",
+      "difficulty": "junior"
+    },
+    {
+      "id": "ct-gen-10",
+      "title": "First Recurring Character",
+      "description": "What it is: Return the first character that appears twice as you scan left to right (or null / empty if none).\n\nGoal: Set or object map for O(n) membership.\n\nWhat to do: Implement firstRecurringChar(str).\n\nFinish when: \"abcdefa\" → \"a\"; \"abcdef\" → null (or your sentinel).",
+      "starterCode": "function firstRecurringChar(str) {\n  // Return first char that repeats, or null if every char is unique in order\n}",
+      "language": "javascript",
+      "difficulty": "junior"
+    },
+    {
+      "id": "ct-gen-11",
+      "title": "Valid Parentheses",
+      "description": "What it is: Classic stack problem—only (), [], {} and determine if every opener is closed in the right order.\n\nWhat to do: Implement isValidParentheses(s). Empty string is usually valid.\n\nFinish when: \"([)]\" is invalid; \"{[]}\" is valid; mention complexity.",
+      "starterCode": "function isValidParentheses(s) {\n  // Return true if all brackets are balanced and correctly nested\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-gen-12",
+      "title": "Maximum Subarray Sum (Kadane)",
+      "description": "What it is: Given an integer array (may include negatives), find the contiguous subarray with the largest sum and return that sum.\n\nGoal: Kadane’s idea—carry a running best ending here; reset when sum goes negative (or define behavior for all-negative arrays).\n\nWhat to do: Implement maxSubArray(nums).\n\nFinish when: [-2,1,-3,4,-1,2,1,-5,4] → 6; discuss empty array if you allow it.",
+      "starterCode": "function maxSubArray(nums) {\n  // Return the largest sum of any contiguous subarray\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-gen-13",
+      "title": "Reverse Words in a String",
+      "description": "What it is: Trim extra spaces and reverse the order of words (not the letters inside each word).\n\nWhat to do: Implement reverseWords(s). Example: \"  hello   world  \" → \"world hello\".\n\nFinish when: Multiple spaces collapsed; leading/trailing spaces removed.",
+      "starterCode": "function reverseWords(s) {\n  // Return words in reverse order, single spaces between, no leading/trailing space\n}",
+      "language": "javascript",
+      "difficulty": "junior"
+    },
+    {
+      "id": "ct-gen-14",
+      "title": "Move Zeros to End",
+      "description": "What it is: Rearrange the array in-place so all zeros come after non-zeros, preserving the relative order of non-zeros.\n\nGoal: Two-pointer or “write position” pattern; O(n) time, O(1) extra space.\n\nWhat to do: Implement moveZeros(nums).\n\nFinish when: [0,1,0,3,12] → [1,3,12,0,0]; all zeros / no zeros edge cases.",
+      "starterCode": "function moveZeros(nums) {\n  // Mutate nums so non-zeros keep order and zeros are at the end; return nothing or nums\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-gen-15",
+      "title": "Longest Substring Without Repeating Characters",
+      "description": "What it is: LeetCode-classic sliding window—length of the longest substring with all distinct characters.\n\nGoal: Expand right, shrink left when a duplicate appears inside the window (map last index).\n\nWhat to do: Implement lengthOfLongestSubstring(s).\n\nFinish when: \"abcabcbb\" → 3; O(n) argument; empty string.",
+      "starterCode": "function lengthOfLongestSubstring(s) {\n  // Return length of longest substring with no repeated character\n}",
+      "language": "javascript",
+      "difficulty": "senior"
+    },
+    {
+      "id": "ct-gen-16",
+      "title": "Merge Two Sorted Arrays",
+      "description": "What it is: Given two sorted arrays, produce one sorted array containing all elements (classic merge step from mergesort).\n\nGoal: Two pointers; avoid unnecessary full sorts of the combined data.\n\nWhat to do: Implement mergeSorted(a, b). Return a new array (do not assume in-place merge into fixed buffers unless specified).\n\nFinish when: One array empty; duplicates allowed; state complexity.",
+      "starterCode": "function mergeSorted(a, b) {\n  // Return a new sorted array containing all elements of a and b in order\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-gen-17",
+      "title": "Binary Search",
+      "description": "What it is: Sorted array of distinct integers and a target—return the index of target, or -1 if absent.\n\nGoal: Halve the search space each step; watch off-by-one and integer mid overflow (optional discussion).\n\nWhat to do: Implement binarySearch(nums, target).\n\nFinish when: Empty array; single element; target at ends.",
+      "starterCode": "function binarySearch(nums, target) {\n  // Return index of target in sorted nums, or -1 if not found\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-gen-18",
+      "title": "Roman to Integer",
+      "description": "What it is: Convert a valid Roman numeral string (I, V, X, L, C, D, M) to its integer value using subtraction rules (IV, IX, etc.).\n\nWhat to do: Implement romanToInt(s). Assume input is valid or document validation.\n\nFinish when: \"MCMXCIV\" → 1994; left-to-right scan with “peek next” rule.",
+      "starterCode": "function romanToInt(s) {\n  // Convert Roman numeral string to integer\n}",
+      "language": "javascript",
+      "difficulty": "senior"
+    },
+    {
+      "id": "ct-gen-19",
+      "title": "Word Pattern",
+      "description": "What it is: Pattern-matching over letters vs words—each distinct letter in pattern must map to exactly one word, and each distinct word must map to exactly one letter (bijection in order). Same letter → same word every time; different letters → different words.\n\nGoal: Split str on spaces and walk pattern and words in lockstep; detect conflicts with two maps or one map + inverse check.\n\nWhat to do: Implement wordPattern(pattern, str). Example: pattern \"abcb\" with str \"cat dog fish dog\" → true (a→cat, b→dog, c→fish, b→dog again). \"abcb\" with \"cat cat fish dog\" → false (a and b cannot both map to \"cat\").\n\nFinish when: Length mismatch (pattern length vs word count) → false; empty pattern/str edge cases; state O(n) time and space.",
+      "starterCode": "function wordPattern(pattern, str) {\n  // Return true if str's space-separated words follow the letter pattern bijectively\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
       "id": "ct-gen-s1",
       "title": "Static review: null and shape",
       "description": "What it is: Code review only—do not rely on running it.\n\nGoal: Spot crashes and bad assumptions when user or profile data is missing or the wrong shape.\n\nWhat to do: List every failure (null name, missing email, non-string). Propose guards, optional chaining, or validation/schema.\n\nFinish when: You’ve named concrete bugs and sketched a safer implementation or types in the editor.",
