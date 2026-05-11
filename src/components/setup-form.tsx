@@ -19,7 +19,14 @@ import {
   CODING_TASK_PRESETS,
   REVIEW_TEMPLATES,
 } from "@/data/presets";
-import { buildCodingTaskGroups, buildQuestionGroups, flattenGroups } from "@/data/preset-helpers";
+import {
+  buildCodingTaskGroups,
+  buildQuestionGroups,
+  filterGroupsByQuery,
+  flattenGroups,
+  questionSearchableText,
+  taskSearchableText,
+} from "@/data/preset-helpers";
 import {
   Play,
   X,
@@ -197,6 +204,8 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   // Step 4: Preparation
   const [selectedQuestions, setSelectedQuestions] = useState<PredefinedQuestion[]>([]);
   const [selectedCodingTasks, setSelectedCodingTasks] = useState<CodingTaskPreset[]>([]);
+  const [questionsQuery, setQuestionsQuery] = useState("");
+  const [tasksQuery, setTasksQuery] = useState("");
   const [selectedReviewTemplate, setSelectedReviewTemplate] = useState<ReviewTemplate>(REVIEW_TEMPLATES[0]);
   const [enablePreTask, setEnablePreTask] = useState(false);
   const [preTaskTitle, setPreTaskTitle] = useState("");
@@ -364,6 +373,10 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const codingTaskGroups = buildCodingTaskGroups(effectiveRole, difficulty, CODING_TASK_PRESETS);
   const availableQuestionsFlat = flattenGroups(questionGroups);
   const availableCodingTasksFlat = flattenGroups(codingTaskGroups);
+  const visibleQuestionGroups = filterGroupsByQuery(questionGroups, questionsQuery, questionSearchableText);
+  const visibleQuestionCount = visibleQuestionGroups.reduce((n, g) => n + g.items.length, 0);
+  const visibleTaskGroups = filterGroupsByQuery(codingTaskGroups, tasksQuery, taskSearchableText);
+  const visibleTaskCount = visibleTaskGroups.reduce((n, g) => n + g.items.length, 0);
 
   return (
     <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
@@ -740,33 +753,60 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                     Lists are ordered by seniority (matched level first), then by strand for Full Stack (C# · .NET, React, shared), then all-level questions.
                   </p>
                   {availableQuestionsFlat.length > 0 ? (
-                    <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
-                      {questionGroups.map((group) => (
-                        <div key={group.heading} className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
-                          {group.items.map((q) => {
-                            const isSelected = selectedQuestions.find((sq) => sq.id === q.id);
-                            return (
-                              <button
-                                key={q.id}
-                                onClick={() => toggleQuestion(q)}
-                                className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
-                                  isSelected
-                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
-                                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="text-sm">{q.question}</div>
-                                  {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
-                                </div>
-                                <Badge variant="secondary" className="mt-1.5 text-xs">{q.category}</Badge>
-                              </button>
-                            );
-                          })}
+                    <>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="search"
+                          value={questionsQuery}
+                          onChange={(e) => setQuestionsQuery(e.target.value)}
+                          placeholder="Search questions… (text, category, id)"
+                          className="flex-1 px-3 py-2 text-sm rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                        />
+                        {questionsQuery && (
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setQuestionsQuery("")}>
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-500 px-0.5">
+                        {questionsQuery
+                          ? `${visibleQuestionCount} of ${availableQuestionsFlat.length} match`
+                          : `${availableQuestionsFlat.length} questions`}
+                      </p>
+                      {visibleQuestionCount === 0 ? (
+                        <p className="text-sm text-zinc-400 py-4 text-center">
+                          No questions match &quot;{questionsQuery}&quot;.
+                        </p>
+                      ) : (
+                        <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+                          {visibleQuestionGroups.map((group) => (
+                            <div key={group.heading} className="space-y-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                              {group.items.map((q) => {
+                                const isSelected = selectedQuestions.find((sq) => sq.id === q.id);
+                                return (
+                                  <button
+                                    key={q.id}
+                                    onClick={() => toggleQuestion(q)}
+                                    className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
+                                      isSelected
+                                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
+                                        : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="text-sm">{q.question}</div>
+                                      {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
+                                    </div>
+                                    <Badge variant="secondary" className="mt-1.5 text-xs">{q.category}</Badge>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   ) : (
                     <p className="text-sm text-zinc-400 py-4 text-center">
                       No predefined questions for &quot;{effectiveRole}&quot;. The agent will generate questions based on the role and topics.
@@ -782,44 +822,71 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                     Select coding tasks to use during the interview. Role-specific tasks appear first (hardest first), then General.
                   </p>
                   {availableCodingTasksFlat.length > 0 ? (
-                    <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
-                      {codingTaskGroups.map((group) => (
-                        <div key={group.heading} className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
-                          {group.items.map((task) => {
-                            const isSelected = selectedCodingTasks.find((t) => t.id === task.id);
-                            return (
-                              <button
-                                key={task.id}
-                                onClick={() => toggleCodingTask(task)}
-                                className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
-                                  isSelected
-                                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
-                                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <div className="text-sm font-medium">{task.title}</div>
-                                    <div className="text-xs text-zinc-500 mt-0.5 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</div>
-                                  </div>
-                                  {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
-                                </div>
-                                <div className="flex gap-1.5 mt-2 flex-wrap">
-                                  <Badge variant="secondary" className="text-xs">{task.language}</Badge>
-                                  <Badge variant="secondary" className="text-xs capitalize">{task.difficulty}</Badge>
-                                  {task.staticReview && (
-                                    <Badge variant="outline" className="text-xs border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-200">
-                                      Static review
-                                    </Badge>
-                                  )}
-                                </div>
-                              </button>
-                            );
-                          })}
+                    <>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="search"
+                          value={tasksQuery}
+                          onChange={(e) => setTasksQuery(e.target.value)}
+                          placeholder="Search tasks… (title, description, language, id)"
+                          className="flex-1 px-3 py-2 text-sm rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                        />
+                        {tasksQuery && (
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setTasksQuery("")}>
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-500 px-0.5">
+                        {tasksQuery
+                          ? `${visibleTaskCount} of ${availableCodingTasksFlat.length} match`
+                          : `${availableCodingTasksFlat.length} tasks`}
+                      </p>
+                      {visibleTaskCount === 0 ? (
+                        <p className="text-sm text-zinc-400 py-4 text-center">
+                          No coding tasks match &quot;{tasksQuery}&quot;.
+                        </p>
+                      ) : (
+                        <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+                          {visibleTaskGroups.map((group) => (
+                            <div key={group.heading} className="space-y-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                              {group.items.map((task) => {
+                                const isSelected = selectedCodingTasks.find((t) => t.id === task.id);
+                                return (
+                                  <button
+                                    key={task.id}
+                                    onClick={() => toggleCodingTask(task)}
+                                    className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
+                                      isSelected
+                                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-1 ring-blue-500"
+                                        : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <div className="text-sm font-medium">{task.title}</div>
+                                        <div className="text-xs text-zinc-500 mt-0.5 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</div>
+                                      </div>
+                                      {isSelected && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />}
+                                    </div>
+                                    <div className="flex gap-1.5 mt-2 flex-wrap">
+                                      <Badge variant="secondary" className="text-xs">{task.language}</Badge>
+                                      <Badge variant="secondary" className="text-xs capitalize">{task.difficulty}</Badge>
+                                      {task.staticReview && (
+                                        <Badge variant="outline" className="text-xs border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-200">
+                                          Static review
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   ) : (
                     <p className="text-sm text-zinc-400 py-4 text-center">
                       No predefined coding tasks for &quot;{effectiveRole}&quot;. The agent will generate tasks based on the role.

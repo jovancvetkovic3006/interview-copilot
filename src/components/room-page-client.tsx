@@ -7,7 +7,14 @@ import type { Participant } from "@/types/room";
 import type { InterviewConfig } from "@/types/interview";
 import type { CodingTaskPreset, PredefinedQuestion } from "@/types/interview";
 import { PREDEFINED_QUESTIONS, CODING_TASK_PRESETS } from "@/data/presets";
-import { buildCodingTaskGroups, buildQuestionGroups, flattenGroups } from "@/data/preset-helpers";
+import {
+  buildCodingTaskGroups,
+  buildQuestionGroups,
+  filterGroupsByQuery,
+  flattenGroups,
+  questionSearchableText,
+  taskSearchableText,
+} from "@/data/preset-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -137,6 +144,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   /** Per-follow-up "copied!" feedback keyed by `${analysisId}::${questionIdx}`. */
   const [copiedFollowUpKey, setCopiedFollowUpKey] = useState<string | null>(null);
   const copiedFollowUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Sidebar search filters (interviewer-only side panel). */
+  const [panelQuestionsQuery, setPanelQuestionsQuery] = useState("");
+  const [panelTasksQuery, setPanelTasksQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const greetingSentRef = useRef(false);
 
@@ -572,6 +582,10 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const codingTaskGroups = buildCodingTaskGroups(configuredRole, configuredDifficulty, CODING_TASK_PRESETS);
   const availableQuestions: PredefinedQuestion[] = flattenGroups(questionGroups);
   const availableTasks: CodingTaskPreset[] = flattenGroups(codingTaskGroups);
+  const visiblePanelQuestionGroups = filterGroupsByQuery(questionGroups, panelQuestionsQuery, questionSearchableText);
+  const visiblePanelQuestionCount = visiblePanelQuestionGroups.reduce((n, g) => n + g.items.length, 0);
+  const visiblePanelTaskGroups = filterGroupsByQuery(codingTaskGroups, panelTasksQuery, taskSearchableText);
+  const visiblePanelTaskCount = visiblePanelTaskGroups.reduce((n, g) => n + g.items.length, 0);
 
   const handleAssignTask = useCallback((task: CodingTaskPreset) => {
     sendCodingTask({ title: task.title, description: task.description, language: task.language, starterCode: task.starterCode });
@@ -1388,30 +1402,59 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                   {availableQuestions.length === 0 ? (
                     <p className="text-xs text-zinc-400 px-1">No questions available for this role.</p>
                   ) : (
-                    questionGroups.map((group) => (
-                      <div key={group.heading} className="space-y-1.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
-                        {group.items.map((q) => (
-                          <div key={q.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-blue-300 dark:hover:border-blue-800 transition-colors">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <Badge variant="secondary" className="text-[10px] mb-1">{q.category}</Badge>
-                                <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{q.question}</p>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
-                                onClick={() => handleSendQuestion(q.question)}
-                                title="Send this question to chat"
-                              >
-                                <Send className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                    <>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="search"
+                          value={panelQuestionsQuery}
+                          onChange={(e) => setPanelQuestionsQuery(e.target.value)}
+                          placeholder="Search questions…"
+                          className="flex-1 px-2 py-1 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                        />
+                        {panelQuestionsQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setPanelQuestionsQuery("")}
+                            className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-1"
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
-                    ))
+                      {panelQuestionsQuery && (
+                        <p className="text-[10px] text-zinc-500 px-0.5">
+                          {visiblePanelQuestionCount} of {availableQuestions.length} match
+                        </p>
+                      )}
+                      {visiblePanelQuestionCount === 0 && panelQuestionsQuery ? (
+                        <p className="text-xs text-zinc-400 px-1">No questions match.</p>
+                      ) : (
+                        visiblePanelQuestionGroups.map((group) => (
+                          <div key={group.heading} className="space-y-1.5">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                            {group.items.map((q) => (
+                              <div key={q.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-blue-300 dark:hover:border-blue-800 transition-colors">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <Badge variant="secondary" className="text-[10px] mb-1">{q.category}</Badge>
+                                    <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{q.question}</p>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
+                                    onClick={() => handleSendQuestion(q.question)}
+                                    title="Send this question to chat"
+                                  >
+                                    <Send className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -1431,39 +1474,68 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                   {availableTasks.length === 0 ? (
                     <p className="text-xs text-zinc-400 px-1">No coding tasks available.</p>
                   ) : (
-                    codingTaskGroups.map((group) => (
-                      <div key={group.heading} className="space-y-1.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
-                        {group.items.map((task) => (
-                          <div key={task.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-green-300 dark:hover:border-green-800 transition-colors">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                                  <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">{task.title}</span>
-                                  <Badge variant="secondary" className="text-[10px]">{task.language}</Badge>
-                                  {task.difficulty && <Badge variant="secondary" className="text-[10px] capitalize">{task.difficulty}</Badge>}
-                                  {task.staticReview && (
-                                    <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-200">
-                                      Static
-                                    </Badge>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-zinc-500 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</p>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 px-2 text-[10px]"
-                                onClick={() => handleAssignTask(task)}
-                                title="Assign this task to the editor"
-                              >
-                                Assign
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                    <>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="search"
+                          value={panelTasksQuery}
+                          onChange={(e) => setPanelTasksQuery(e.target.value)}
+                          placeholder="Search tasks…"
+                          className="flex-1 px-2 py-1 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                        />
+                        {panelTasksQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setPanelTasksQuery("")}
+                            className="text-[10px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-1"
+                          >
+                            Clear
+                          </button>
+                        )}
                       </div>
-                    ))
+                      {panelTasksQuery && (
+                        <p className="text-[10px] text-zinc-500 px-0.5">
+                          {visiblePanelTaskCount} of {availableTasks.length} match
+                        </p>
+                      )}
+                      {visiblePanelTaskCount === 0 && panelTasksQuery ? (
+                        <p className="text-xs text-zinc-400 px-1">No coding tasks match.</p>
+                      ) : (
+                        visiblePanelTaskGroups.map((group) => (
+                          <div key={group.heading} className="space-y-1.5">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                            {group.items.map((task) => (
+                              <div key={task.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-green-300 dark:hover:border-green-800 transition-colors">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                      <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">{task.title}</span>
+                                      <Badge variant="secondary" className="text-[10px]">{task.language}</Badge>
+                                      {task.difficulty && <Badge variant="secondary" className="text-[10px] capitalize">{task.difficulty}</Badge>}
+                                      {task.staticReview && (
+                                        <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-200">
+                                          Static
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-zinc-500 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</p>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 px-2 text-[10px]"
+                                    onClick={() => handleAssignTask(task)}
+                                    title="Assign this task to the editor"
+                                  >
+                                    Assign
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))
+                      )}
+                    </>
                   )}
                 </div>
               )}

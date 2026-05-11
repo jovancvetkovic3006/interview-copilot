@@ -15,6 +15,7 @@ import {
 import { ArrowLeft, CheckCircle2, ClipboardList, Loader2, Sparkles } from "lucide-react";
 import { createPreTask } from "@/lib/pretask-client";
 import { CODING_TASK_PRESETS } from "@/data/presets";
+import { taskSearchableText } from "@/data/preset-helpers";
 import type { CodingTaskPreset } from "@/types/interview";
 
 const LANGUAGES = [
@@ -46,13 +47,27 @@ export default function NewPreTaskPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [presetRole, setPresetRole] = useState<string>("General");
+  const [presetQuery, setPresetQuery] = useState("");
   // Track which preset's content is currently in the form so we can highlight it.
   const [appliedPresetId, setAppliedPresetId] = useState<string | null>(null);
 
-  const visiblePresets = useMemo<(CodingTaskPreset & { role: string })[]>(() => {
+  const presetsForRole = useMemo<(CodingTaskPreset & { role: string })[]>(() => {
     if (presetRole === "All") return ALL_PRESETS;
     return (CODING_TASK_PRESETS[presetRole] ?? []).map((t) => ({ ...t, role: presetRole }));
   }, [presetRole]);
+
+  const visiblePresets = useMemo<(CodingTaskPreset & { role: string })[]>(() => {
+    const tokens = presetQuery
+      .toLowerCase()
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (tokens.length === 0) return presetsForRole;
+    return presetsForRole.filter((p) => {
+      const hay = `${taskSearchableText(p)} ${p.role}`.toLowerCase();
+      return tokens.every((t) => hay.includes(t));
+    });
+  }, [presetsForRole, presetQuery]);
 
   const applyPreset = (preset: CodingTaskPreset) => {
     setTitle(preset.title);
@@ -147,6 +162,29 @@ export default function NewPreTaskPage() {
                     </Badge>
                   ))}
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="search"
+                    value={presetQuery}
+                    onChange={(e) => setPresetQuery(e.target.value)}
+                    placeholder="Search presets… (title, description, language, id)"
+                    className="flex-1 px-2.5 py-1.5 text-xs rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                  />
+                  {presetQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setPresetQuery("")}
+                      className="text-[11px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-1 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {presetQuery && (
+                  <p className="text-[10px] text-zinc-500 px-0.5">
+                    {visiblePresets.length} of {presetsForRole.length} match
+                  </p>
+                )}
                 {visiblePresets.length > 0 ? (
                   <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {visiblePresets.map((task) => {
@@ -180,6 +218,10 @@ export default function NewPreTaskPage() {
                       );
                     })}
                   </div>
+                ) : presetQuery ? (
+                  <p className="text-xs text-zinc-400 py-3 text-center">
+                    No presets match &quot;{presetQuery}&quot;.
+                  </p>
                 ) : (
                   <p className="text-xs text-zinc-400 py-3 text-center">
                     No presets for &quot;{presetRole}&quot;. Pick another role or fill the fields below.

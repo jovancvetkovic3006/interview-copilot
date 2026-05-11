@@ -164,3 +164,38 @@ export function buildCodingTaskGroups(
 export function flattenGroups<T>(groups: PresetGroup<T>[]): T[] {
   return groups.flatMap((g) => g.items);
 }
+
+/**
+ * Case-insensitive, whitespace-tolerant filter. Each whitespace-separated token in `query` must be
+ * present in the searchable text of an item for that item to be kept. Empty queries return the
+ * groups unchanged. Groups with no remaining items are dropped (so headings don't render empty).
+ */
+export function filterGroupsByQuery<T>(
+  groups: PresetGroup<T>[],
+  query: string,
+  getSearchableText: (item: T) => string
+): PresetGroup<T>[] {
+  const tokens = query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return groups;
+  return groups
+    .map((g) => ({
+      heading: g.heading,
+      items: g.items.filter((item) => {
+        const hay = getSearchableText(item).toLowerCase();
+        return tokens.every((t) => hay.includes(t));
+      }),
+    }))
+    .filter((g) => g.items.length > 0);
+}
+
+export function questionSearchableText(q: PredefinedQuestion): string {
+  return [q.question, q.category, q.id].filter(Boolean).join(" ");
+}
+
+export function taskSearchableText(t: CodingTaskPreset): string {
+  return [t.title, t.description, t.language, t.difficulty, t.id].filter(Boolean).join(" ");
+}
