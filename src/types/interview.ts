@@ -66,6 +66,13 @@ export interface CodingTaskPreset {
   staticReview?: boolean;
   /** For Full Stack presets: groups tasks with questions (React vs .NET vs shared). */
   strand?: PresetStrand;
+  /**
+   * When true, this entry represents a task the candidate already solved on an external provider
+   * (HackerRank, CodeSignal, etc.). The interviewer pasted the task description and the candidate's
+   * solution at setup time. `starterCode` carries the candidate's solution so opening the task in
+   * the shared editor seeds the buffer with their code, ready for live discussion.
+   */
+  preTask?: boolean;
 }
 
 export interface ReviewTemplate {

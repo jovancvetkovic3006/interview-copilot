@@ -58,6 +58,12 @@ function buildSystemPrompt(config: {
     description: string;
     starterCode: string;
     language: string;
+    /**
+     * When true, this is an external PRE-TASK pasted at setup time: the candidate already
+     * solved it on another platform and `starterCode` carries their solution. The interviewer
+     * can open it in the shared editor for live discussion — do NOT assign a fresh blank version.
+     */
+    preTask?: boolean;
   }[];
   /** Shared live-editor snapshot for AI feedback (may repeat while still on the same task). */
   codingTaskSubmission?: {
@@ -129,10 +135,34 @@ ${config.selectedQuestions.map((q, i) => `${i + 1}. [${q.category}] ${q.question
   }
 
   if (config.selectedCodingTasks && config.selectedCodingTasks.length > 0) {
-    prompt += `
+    const preTasks = config.selectedCodingTasks.filter((t) => t.preTask);
+    const regularTasks = config.selectedCodingTasks.filter((t) => !t.preTask);
+
+    if (preTasks.length > 0) {
+      prompt += `
+
+EXTERNAL PRE-TASKS (candidate already solved these on another platform — HackerRank, CodeSignal, etc.):
+${preTasks
+  .map(
+    (t) => `- ${t.title} (${t.language})
+  Task: ${t.description || "(no description provided)"}
+  Candidate's solution:
+${t.starterCode
+  .split("\n")
+  .map((line) => `    ${line}`)
+  .join("\n")}`
+  )
+  .join("\n\n")}
+
+The interviewer may "Open" any PRE-TASK during the interview, which loads the candidate's solution into the shared editor for live discussion. When that happens, do NOT assign a fresh blank [CODING_TASK] for it — instead, walk the candidate through their submitted code: probe their approach, design decisions, edge-case handling, complexity, and potential improvements.`;
+    }
+
+    if (regularTasks.length > 0) {
+      prompt += `
 
 CODING TASKS TO USE (assign these at appropriate moments using the [CODING_TASK] format below):
-${config.selectedCodingTasks.map((t) => `- ${t.title} (${t.language}): ${t.description}`).join("\n")}`;
+${regularTasks.map((t) => `- ${t.title} (${t.language}): ${t.description}`).join("\n")}`;
+    }
   }
 
   let codingReviewBehaviorHint = "";

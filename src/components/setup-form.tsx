@@ -206,6 +206,20 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const [selectedCodingTasks, setSelectedCodingTasks] = useState<CodingTaskPreset[]>([]);
   const [questionsQuery, setQuestionsQuery] = useState("");
   const [tasksQuery, setTasksQuery] = useState("");
+  /**
+   * "External pre-tasks" — tasks the candidate already solved on another platform (HackerRank,
+   * CodeSignal, etc.). The interviewer pastes the task description and the candidate's solution;
+   * each entry becomes a CodingTaskPreset with `preTask: true` on Start. They appear at the top of
+   * the in-room Coding Tasks sidebar with a PRE-TASK badge so the interviewer can open them in the
+   * shared editor and walk the candidate through their solution.
+   */
+  const [externalPreTasks, setExternalPreTasks] = useState<CodingTaskPreset[]>([]);
+  /** Inline composer for the next external pre-task. */
+  const [externalDraftTitle, setExternalDraftTitle] = useState("");
+  const [externalDraftDescription, setExternalDraftDescription] = useState("");
+  const [externalDraftLanguage, setExternalDraftLanguage] = useState("javascript");
+  const [externalDraftSolution, setExternalDraftSolution] = useState("");
+  const [externalComposerOpen, setExternalComposerOpen] = useState(false);
   const [selectedReviewTemplate, setSelectedReviewTemplate] = useState<ReviewTemplate>(REVIEW_TEMPLATES[0]);
   const [enablePreTask, setEnablePreTask] = useState(false);
   const [preTaskTitle, setPreTaskTitle] = useState("");
@@ -323,6 +337,39 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
     }
   };
 
+  const resetExternalDraft = () => {
+    setExternalDraftTitle("");
+    setExternalDraftDescription("");
+    setExternalDraftSolution("");
+    setExternalDraftLanguage("javascript");
+  };
+
+  const externalDraftValid =
+    externalDraftTitle.trim().length > 0 && externalDraftSolution.trim().length > 0;
+
+  const addExternalPreTask = () => {
+    if (!externalDraftValid) return;
+    const id = `ext-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Date.now().toString(36)}`;
+    const task: CodingTaskPreset = {
+      id,
+      title: externalDraftTitle.trim(),
+      description: externalDraftDescription.trim(),
+      // The candidate's solution becomes `starterCode` so opening the task in the shared editor
+      // seeds the buffer with their code, ready for live walkthrough.
+      starterCode: externalDraftSolution,
+      language: externalDraftLanguage,
+      difficulty: "mid",
+      preTask: true,
+    };
+    setExternalPreTasks((prev) => [...prev, task]);
+    resetExternalDraft();
+    setExternalComposerOpen(false);
+  };
+
+  const removeExternalPreTask = (id: string) => {
+    setExternalPreTasks((prev) => prev.filter((t) => t.id !== id));
+  };
+
   const handleStart = () => {
     if (!candidateName.trim()) return;
 
@@ -337,6 +384,10 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
           }
         : undefined;
 
+    // External pre-tasks are always included and rendered first so they sit at the top of the
+    // in-room sidebar with the PRE-TASK badge, separate from the role's coding-task presets.
+    const mergedCodingTasks: CodingTaskPreset[] = [...externalPreTasks, ...selectedCodingTasks];
+
     const config: InterviewConfig = {
       candidateName: candidateName.trim(),
       role: effectiveRole,
@@ -348,7 +399,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
       notes: candidateNotes.trim(),
       preInterviewTask,
       selectedQuestions,
-      selectedCodingTasks,
+      selectedCodingTasks: mergedCodingTasks,
       reviewTemplate: selectedReviewTemplate,
     };
 
@@ -704,7 +755,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                 <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950 p-3">
                   <p className="text-xs text-blue-700 dark:text-blue-300">
                     The agent will also receive: uploaded files ({uploadedFiles.length}), candidate notes,
-                    selected questions ({selectedQuestions.length}), and coding tasks ({selectedCodingTasks.length}) as additional context.
+                    selected questions ({selectedQuestions.length}), coding tasks ({selectedCodingTasks.length}), and PRE-TASKs ({externalPreTasks.length}) as additional context.
                   </p>
                 </div>
               </div>
@@ -818,6 +869,141 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
               {/* Coding Tasks sub-tab */}
               {prepTab === "coding" && (
                 <div className="space-y-3">
+                  {/* External PRE-TASKs — paste tasks the candidate already solved on another platform. */}
+                  <div className="rounded-lg border border-violet-200 dark:border-violet-900/60 bg-violet-50/40 dark:bg-violet-950/20 p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border-violet-200 dark:border-violet-900/50">
+                            PRE-TASK
+                          </Badge>
+                          <span className="text-xs font-medium">Paste task + candidate solution</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500">
+                          From an external provider (HackerRank, CodeSignal, etc.). These appear at the top of the in-room Coding Tasks panel; opening one loads the candidate&apos;s solution into the shared editor for discussion.
+                        </p>
+                      </div>
+                      {!externalComposerOpen && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setExternalComposerOpen(true)}
+                          className="shrink-0"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add
+                        </Button>
+                      )}
+                    </div>
+
+                    {externalPreTasks.length > 0 && (
+                      <div className="space-y-2">
+                        {externalPreTasks.map((t) => (
+                          <div
+                            key={t.id}
+                            className="rounded-md border border-violet-200 dark:border-violet-900/60 bg-white dark:bg-zinc-950 p-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border-violet-200 dark:border-violet-900/50">
+                                    PRE-TASK
+                                  </Badge>
+                                  <span className="text-xs font-medium truncate">{t.title}</span>
+                                  <Badge variant="secondary" className="text-[10px]">{t.language}</Badge>
+                                </div>
+                                {t.description && (
+                                  <p className="text-[11px] text-zinc-500 mt-1 whitespace-pre-line max-h-20 overflow-y-auto pr-0.5">
+                                    {t.description}
+                                  </p>
+                                )}
+                                <p className="text-[10px] text-zinc-400 mt-1">
+                                  Solution: {t.starterCode.length} chars · {t.starterCode.split("\n").length} lines
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeExternalPreTask(t.id)}
+                                className="shrink-0 h-7 w-7 p-0 text-zinc-500 hover:text-red-600"
+                                title="Remove"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {externalComposerOpen && (
+                      <div className="space-y-2 rounded-md border border-violet-200 dark:border-violet-900/60 bg-white dark:bg-zinc-950 p-2.5">
+                        <input
+                          type="text"
+                          value={externalDraftTitle}
+                          onChange={(e) => setExternalDraftTitle(e.target.value)}
+                          placeholder="Task title (e.g. Two Sum — HackerRank)"
+                          className="w-full px-2.5 py-1.5 text-sm rounded-md border border-zinc-300 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:border-zinc-700 dark:bg-zinc-950"
+                        />
+                        <textarea
+                          value={externalDraftDescription}
+                          onChange={(e) => setExternalDraftDescription(e.target.value)}
+                          placeholder="Task description (paste the original problem statement)…"
+                          rows={3}
+                          className="w-full px-2.5 py-1.5 text-sm rounded-md border border-zinc-300 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:border-zinc-700 dark:bg-zinc-950 resize-none"
+                        />
+                        <div className="flex flex-wrap gap-1.5">
+                          {["javascript", "typescript", "python", "java", "kotlin", "swift", "go", "sql"].map((lang) => (
+                            <Badge
+                              key={lang}
+                              variant={externalDraftLanguage === lang ? "default" : "secondary"}
+                              className="cursor-pointer text-xs"
+                              onClick={() => setExternalDraftLanguage(lang)}
+                            >
+                              {lang}
+                            </Badge>
+                          ))}
+                        </div>
+                        <textarea
+                          value={externalDraftSolution}
+                          onChange={(e) => setExternalDraftSolution(e.target.value)}
+                          placeholder="Candidate's solution (paste the code they submitted)…"
+                          rows={6}
+                          className="w-full px-2.5 py-1.5 text-xs font-mono rounded-md border border-zinc-300 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:border-zinc-700 dark:bg-zinc-950 resize-y"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              resetExternalDraft();
+                              setExternalComposerOpen(false);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={addExternalPreTask}
+                            disabled={!externalDraftValid}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add PRE-TASK
+                          </Button>
+                        </div>
+                        {!externalDraftValid && (
+                          <p className="text-[10px] text-zinc-500">
+                            Title and candidate&apos;s solution are required.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <p className="text-xs text-zinc-500">
                     Select coding tasks to use during the interview. Role-specific tasks appear first (hardest first), then General.
                   </p>

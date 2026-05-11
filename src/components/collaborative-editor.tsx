@@ -50,11 +50,14 @@ interface CollaborativeEditorProps {
   /** When set (server-issued), all clients use this for the Yjs PartyKit room suffix. */
   collaborationTaskId?: string;
   /**
-   * Origin of the current task. `"pre-interview-task"` means the buffer was preloaded with the
-   * candidate's take-home submission; we add a small banner so it's clear we're not starting from
-   * a blank task. Default: omitted (treated as an in-interview assignment).
+   * Origin of the current task. Two specially-handled values:
+   * - `"pre-interview-task"` — the buffer was preloaded with the candidate's take-home submission.
+   * - `"external-pre-task"` — interviewer-pasted task + solution from an external provider
+   *   (HackerRank, etc.); buffer holds the candidate's pre-existing solution for discussion.
+   * Both render a small badge so it's clear we're not starting from a blank task. Default: omitted
+   * (treated as an in-interview assignment).
    */
-  taskSource?: "pre-interview-task";
+  taskSource?: "pre-interview-task" | "external-pre-task";
 }
 
 function buildCommentPrefix(lang: string): { start?: string; end?: string; line: string } {
@@ -343,6 +346,11 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
             {taskSource === "pre-interview-task" && (
               <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-900/50">
                 Take-home submission
+              </Badge>
+            )}
+            {taskSource === "external-pre-task" && (
+              <Badge variant="secondary" className="text-[10px] bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border-violet-200 dark:border-violet-900/50">
+                PRE-TASK · candidate solution
               </Badge>
             )}
           </div>

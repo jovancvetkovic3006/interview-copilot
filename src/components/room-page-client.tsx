@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { usePartyRoom } from "@/hooks/use-party-room";
 import { useSpeechTranscription } from "@/hooks/use-speech-transcription";
 import type { Participant } from "@/types/room";
@@ -226,6 +226,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 description: t.description,
                 starterCode: t.starterCode,
                 language: t.language,
+                ...(t.preTask ? { preTask: true as const } : {}),
               })),
             }
           : {}),
@@ -587,8 +588,34 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const visiblePanelTaskGroups = filterGroupsByQuery(codingTaskGroups, panelTasksQuery, taskSearchableText);
   const visiblePanelTaskCount = visiblePanelTaskGroups.reduce((n, g) => n + g.items.length, 0);
 
+  /**
+   * External PRE-TASKs (interviewer pasted task + candidate solution at setup time). Rendered as a
+   * dedicated group at the top of the in-room Coding Tasks panel, separate from the role's preset
+   * library. They live on `roomConfig.selectedCodingTasks` with `preTask: true`.
+   */
+  const externalPreTasks = useMemo<CodingTaskPreset[]>(
+    () => (roomConfig?.selectedCodingTasks || []).filter((t) => t.preTask),
+    [roomConfig?.selectedCodingTasks]
+  );
+  const visibleExternalPreTasks = useMemo(() => {
+    if (!panelTasksQuery.trim()) return externalPreTasks;
+    const tokens = panelTasksQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    return externalPreTasks.filter((t) => {
+      const hay = taskSearchableText(t).toLowerCase();
+      return tokens.every((token) => hay.includes(token));
+    });
+  }, [externalPreTasks, panelTasksQuery]);
+
   const handleAssignTask = useCallback((task: CodingTaskPreset) => {
-    sendCodingTask({ title: task.title, description: task.description, language: task.language, starterCode: task.starterCode });
+    sendCodingTask({
+      title: task.title,
+      description: task.description,
+      language: task.language,
+      starterCode: task.starterCode,
+      // External PRE-TASKs carry the candidate's pre-existing solution as `starterCode`; flag the
+      // editor so it shows the PRE-TASK badge instead of treating it as a fresh assignment.
+      ...(task.preTask ? { source: "external-pre-task" as const } : {}),
+    });
   }, [sendCodingTask]);
 
   const handleSendQuestion = useCallback((question: string) => {
@@ -1467,11 +1494,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               >
                 {expandedSection === "tasks" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <Code2 className="h-3.5 w-3.5 text-green-500" />
-                Coding Tasks ({availableTasks.length})
+                Coding Tasks ({externalPreTasks.length + availableTasks.length})
               </button>
               {expandedSection === "tasks" && (
                 <div className="px-3 pb-3 space-y-3">
-                  {availableTasks.length === 0 ? (
+                  {externalPreTasks.length === 0 && availableTasks.length === 0 ? (
                     <p className="text-xs text-zinc-400 px-1">No coding tasks available.</p>
                   ) : (
                     <>
@@ -1495,10 +1522,52 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       </div>
                       {panelTasksQuery && (
                         <p className="text-[10px] text-zinc-500 px-0.5">
-                          {visiblePanelTaskCount} of {availableTasks.length} match
+                          {visibleExternalPreTasks.length + visiblePanelTaskCount} of {externalPreTasks.length + availableTasks.length} match
                         </p>
                       )}
-                      {visiblePanelTaskCount === 0 && panelTasksQuery ? (
+                      {/* PRE-TASKs group — shown first when present so the interviewer can open the
+                          candidate's external solution for discussion right away. */}
+                      {visibleExternalPreTasks.length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400 px-0.5">
+                            Pre-tasks (external)
+                          </p>
+                          {visibleExternalPreTasks.map((task) => (
+                            <div
+                              key={task.id}
+                              className="group rounded-lg border border-violet-200 dark:border-violet-900/60 bg-violet-50/40 dark:bg-violet-950/20 p-2.5 hover:border-violet-400 dark:hover:border-violet-700 transition-colors"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                    <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border-violet-200 dark:border-violet-900/50">
+                                      PRE-TASK
+                                    </Badge>
+                                    <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">{task.title}</span>
+                                    <Badge variant="secondary" className="text-[10px]">{task.language}</Badge>
+                                  </div>
+                                  {task.description && (
+                                    <p className="text-[11px] text-zinc-500 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</p>
+                                  )}
+                                  <p className="text-[10px] text-zinc-400 mt-1">
+                                    Opens with the candidate&apos;s solution loaded ({task.starterCode.split("\n").length} lines)
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 px-2 text-[10px]"
+                                  onClick={() => handleAssignTask(task)}
+                                  title="Open this PRE-TASK in the shared editor with the candidate's solution"
+                                >
+                                  Open
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {visibleExternalPreTasks.length === 0 && visiblePanelTaskCount === 0 && panelTasksQuery ? (
                         <p className="text-xs text-zinc-400 px-1">No coding tasks match.</p>
                       ) : (
                         visiblePanelTaskGroups.map((group) => (
