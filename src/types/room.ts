@@ -62,6 +62,13 @@ export interface RoomState {
    * If the host leaves, the next-longest-present interviewer is promoted (server-managed).
    */
   hostParticipantId: string | null;
+  /**
+   * Server wall-clock (ms) when the room first entered the `interview` phase — used for scheduled
+   * duration + extensions. Null until the first transition to interview.
+   */
+  interviewStartedAt: number | null;
+  /** Extra minutes the host added when the scheduled block ran out (+30 / +60 per action). */
+  timeExtensionMinutes: number;
 }
 
 export type RoomMessage =
@@ -72,7 +79,16 @@ export type RoomMessage =
   | { type: "chat"; message: ChatMessage }
   | { type: "agent-response"; content: string }
   | { type: "config"; config: unknown }
-  | { type: "phase"; phase: string }
+  | {
+      type: "phase";
+      phase: string;
+      interviewStartedAt?: number | null;
+      timeExtensionMinutes?: number;
+    }
+  /** Client → server: host requests more scheduled time (minutes). */
+  | { type: "time-extension"; addMinutes: 30 | 60 }
+  /** Server → clients: authoritative interview timer fields after phase change or extension. */
+  | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }

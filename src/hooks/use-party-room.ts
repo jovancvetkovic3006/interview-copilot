@@ -28,6 +28,8 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const [config, setConfig] = useState<unknown | null>(null);
   const [codingTask, setCodingTask] = useState<unknown | null>(null);
   const [interviewReport, setInterviewReport] = useState<InterviewReport | null>(null);
+  const [interviewStartedAt, setInterviewStartedAt] = useState<number | null>(null);
+  const [timeExtensionMinutes, setTimeExtensionMinutes] = useState(0);
   /** First interviewer (server-elected); only the host renders the SetupForm. */
   const [hostParticipantId, setHostParticipantId] = useState<string | null>(null);
 
@@ -80,8 +82,24 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
         case "config":
           setConfig(data.config);
           break;
-        case "phase":
+        case "phase": {
           setPhase(data.phase as RoomState["phase"]);
+          if ("interviewStartedAt" in data) {
+            const v = data.interviewStartedAt;
+            setInterviewStartedAt(typeof v === "number" ? v : null);
+          }
+          if ("timeExtensionMinutes" in data && typeof data.timeExtensionMinutes === "number") {
+            setTimeExtensionMinutes(data.timeExtensionMinutes);
+          }
+          break;
+        }
+        case "interview-time":
+          setInterviewStartedAt(
+            typeof data.interviewStartedAt === "number" ? data.interviewStartedAt : null
+          );
+          setTimeExtensionMinutes(
+            typeof data.timeExtensionMinutes === "number" ? data.timeExtensionMinutes : 0
+          );
           break;
         case "coding-task":
           setCodingTask(data.task);
@@ -130,6 +148,12 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           setConfig(data.state.config);
           setCodingTask(data.state.codingTask);
           setHostParticipantId(data.state.hostParticipantId);
+          setInterviewStartedAt(
+            typeof data.state.interviewStartedAt === "number" ? data.state.interviewStartedAt : null
+          );
+          setTimeExtensionMinutes(
+            typeof data.state.timeExtensionMinutes === "number" ? data.state.timeExtensionMinutes : 0
+          );
           setTranscriptAnalyses(
             participantRoleRef.current !== "interviewer"
               ? []
@@ -186,6 +210,13 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     socketRef.current.send(JSON.stringify({ type: "coding-task", task } satisfies RoomMessage));
   }, []);
 
+  const sendTimeExtension = useCallback((addMinutes: 30 | 60) => {
+    if (!socketRef.current) return;
+    socketRef.current.send(
+      JSON.stringify({ type: "time-extension", addMinutes } satisfies RoomMessage)
+    );
+  }, []);
+
   const sendTranscript = useCallback((text: string, speaker: string) => {
     const entry = { text, speaker, timestamp: Date.now() };
     const preview = text.length > 120 ? `${text.slice(0, 120)}…` : text;
@@ -229,12 +260,15 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     config,
     codingTask,
     interviewReport,
+    interviewStartedAt,
+    timeExtensionMinutes,
     hostParticipantId,
     sendChat,
     sendAgentResponse,
     sendConfig,
     sendPhase,
     sendCodingTask,
+    sendTimeExtension,
     sendTranscript,
     sendTranscriptAnalysis,
     sendInterviewReport,

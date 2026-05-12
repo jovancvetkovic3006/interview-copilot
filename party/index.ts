@@ -20,7 +20,14 @@ export type RoomMessage =
   | { type: "chat"; message: ChatMessage }
   | { type: "agent-response"; content: string }
   | { type: "config"; config: unknown }
-  | { type: "phase"; phase: string }
+  | {
+      type: "phase";
+      phase: string;
+      interviewStartedAt?: number | null;
+      timeExtensionMinutes?: number;
+    }
+  | { type: "time-extension"; addMinutes: 30 | 60 }
+  | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
@@ -59,6 +66,8 @@ interface RoomState {
   interviewReport: InterviewReport | null;
   /** First interviewer to join is the host; only the host can run setup. */
   hostParticipantId: string | null;
+  interviewStartedAt: number | null;
+  timeExtensionMinutes: number;
 }
 
 /** Server-issued id so every client joins the same Yjs sub-room (hashing description caused drift). */
@@ -88,6 +97,8 @@ export default class InterviewRoom implements Party.Server {
     transcriptAnalyses: [],
     interviewReport: null,
     hostParticipantId: null,
+    interviewStartedAt: null,
+    timeExtensionMinutes: 0,
   };
 
   onConnect(conn: Party.Connection) {
@@ -221,15 +232,18 @@ export default class InterviewRoom implements Party.Server {
       }
 
       case "agent-response": {
+        const raw = typeof data.content === "string" ? data.content : "";
+        const stripped = raw.replace(/\[INTERVIEW_COMPLETE\]/gi, "").trimEnd();
+        if (!stripped.trim()) break;
         const agentMsg: ChatMessage = {
           id: `agent-${Date.now()}`,
           role: "agent",
-          content: data.content,
+          content: stripped,
           senderName: "AI Agent",
           timestamp: Date.now(),
         };
         this.state.messages.push(agentMsg);
-        this.room.broadcast(JSON.stringify(data));
+        this.room.broadcast(JSON.stringify({ type: "agent-response", content: stripped } satisfies RoomMessage));
         break;
       }
 
@@ -240,8 +254,34 @@ export default class InterviewRoom implements Party.Server {
       }
 
       case "phase": {
-        this.state.phase = data.phase as RoomState["phase"];
-        this.room.broadcast(JSON.stringify(data), [sender.id]);
+        const next = data.phase as RoomState["phase"];
+        if (next === "interview" && this.state.interviewStartedAt == null) {
+          this.state.interviewStartedAt = Date.now();
+        }
+        this.state.phase = next;
+        const phasePayload = {
+          type: "phase" as const,
+          phase: this.state.phase,
+          interviewStartedAt: this.state.interviewStartedAt,
+          timeExtensionMinutes: this.state.timeExtensionMinutes,
+        };
+        // Broadcast to everyone (including sender) so the host receives authoritative
+        // `interviewStartedAt` from the server.
+        this.room.broadcast(JSON.stringify(phasePayload));
+        break;
+      }
+
+      case "time-extension": {
+        if (this.state.phase !== "interview") break;
+        const add = data.addMinutes === 60 ? 60 : 30;
+        this.state.timeExtensionMinutes += add;
+        this.room.broadcast(
+          JSON.stringify({
+            type: "interview-time",
+            interviewStartedAt: this.state.interviewStartedAt,
+            timeExtensionMinutes: this.state.timeExtensionMinutes,
+          } satisfies RoomMessage)
+        );
         break;
       }
 

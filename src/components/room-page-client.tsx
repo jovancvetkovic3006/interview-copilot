@@ -93,6 +93,16 @@ function inviteRoleLabel(role: Participant["role"]): string {
   return "Candidate";
 }
 
+/** Format milliseconds as `H:MM:SS` or `M:SS` for the interview countdown. */
+function formatRemainingMs(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 type Step = "join" | "setup" | "interview" | "review";
 type InviteCopyKind = "candidate" | "interviewer";
 
@@ -172,6 +182,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     phase,
     config: sharedConfig,
     codingTask,
+    interviewReport,
+    interviewStartedAt,
+    timeExtensionMinutes,
     hostParticipantId,
     sendChat,
     sendAgentResponse,
@@ -180,7 +193,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     sendPhase,
     sendConfig,
     sendCodingTask,
-    interviewReport,
+    sendTimeExtension,
     sendInterviewReport,
   } = usePartyRoom(step !== "join" ? roomCode : null, participant);
 
@@ -228,6 +241,30 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
    */
   const roomConfig = (sharedConfig as InterviewConfig | null) ?? null;
 
+  /** Re-render once per second while the interview clock is active. */
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (phase !== "interview" || interviewStartedAt == null) return;
+    const t0 = window.setTimeout(() => {
+      setClockNow(Date.now());
+    }, 0);
+    const id = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearInterval(id);
+    };
+  }, [phase, interviewStartedAt, timeExtensionMinutes]);
+
+  const interviewDurationMinutes = roomConfig?.duration ?? 30;
+  const plannedTotalMinutes = interviewDurationMinutes + timeExtensionMinutes;
+  const deadlineMs =
+    interviewStartedAt != null && phase === "interview"
+      ? interviewStartedAt + plannedTotalMinutes * 60 * 1000
+      : null;
+  const remainingMs = deadlineMs != null ? Math.max(0, deadlineMs - clockNow) : null;
+  const scheduleExpired =
+    Boolean(deadlineMs != null && remainingMs === 0 && phase === "interview");
+
   const reportNeedsSessionNotes = !hasUsableTranscript(transcript);
 
   const resolveAgentApiConfig = useCallback(
@@ -272,6 +309,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               })),
             }
           : {}),
+        collaborativeRoom: true as const,
       };
     },
     [participants, participant?.name]
@@ -934,9 +972,20 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     return (
       <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span className="font-mono text-sm font-bold text-blue-600">{roomCode}</span>
             <Badge variant="secondary" className="text-xs">Interview in progress</Badge>
+            {phase === "interview" && interviewStartedAt != null && remainingMs != null && (
+              <div
+                className={`flex items-center gap-1 text-xs tabular-nums ${
+                  scheduleExpired ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-zinc-600 dark:text-zinc-400"
+                }`}
+              >
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <span>{scheduleExpired ? "Time's up" : `${formatRemainingMs(remainingMs)} left`}</span>
+                <span className="text-zinc-400 font-normal">· {plannedTotalMinutes} min block</span>
+              </div>
+            )}
             {connected ? (
               <span className="flex items-center gap-1 text-xs text-green-600">
                 <Wifi className="h-3 w-3" /> Connected
@@ -977,6 +1026,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             )}
           </div>
         </div>
+        {phase === "interview" && scheduleExpired && (
+          <div className="px-4 py-2 text-center text-sm bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 border-b border-amber-200 dark:border-amber-900/50">
+            Scheduled time has ended. Please wait — the host can add more time or end the interview to generate the review.
+          </div>
+        )}
 
         <div className="flex-1 flex overflow-hidden min-h-0">
           <div className="w-80 min-w-72 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0">
@@ -1090,6 +1144,29 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   // ── Interviewer view ──
   return (
     <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
+      {phase === "interview" && scheduleExpired && isHost && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md shadow-xl border-zinc-200 dark:border-zinc-800">
+            <CardHeader>
+              <CardTitle>Scheduled time is up</CardTitle>
+              <CardDescription>
+                Add more time to continue, or end the interview to generate the AI review — same as the &quot;End interview&quot; flow (nothing is cleared until the review step).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <Button type="button" className="w-full" onClick={() => sendTimeExtension(30)}>
+                Add 30 minutes
+              </Button>
+              <Button type="button" className="w-full" variant="secondary" onClick={() => sendTimeExtension(60)}>
+                Add 1 hour
+              </Button>
+              <Button type="button" className="w-full" variant="destructive" onClick={handleEndInterview}>
+                End interview &amp; generate review
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm font-bold text-blue-600">{roomCode}</span>
@@ -1150,6 +1227,22 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             </div>
           )}
           <Badge variant="secondary" className="text-xs capitalize">{phase}</Badge>
+          {phase === "interview" && interviewStartedAt != null && remainingMs != null && (
+            <div
+              className={`flex items-center gap-1 text-xs tabular-nums ${
+                scheduleExpired ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-zinc-600 dark:text-zinc-400"
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              <span>{scheduleExpired ? "Time's up" : `${formatRemainingMs(remainingMs)} left`}</span>
+              <span className="text-zinc-400 font-normal">· {plannedTotalMinutes} min block</span>
+            </div>
+          )}
+          {phase === "interview" && scheduleExpired && !isHost && (
+            <span className="text-[11px] text-amber-700 dark:text-amber-300 max-w-[14rem] leading-snug">
+              Waiting for host to add time or end the interview.
+            </span>
+          )}
           {isHost && (
             <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
               Host

@@ -42,6 +42,8 @@ function buildSystemPrompt(config: {
   difficulty: string;
   topics: string[];
   candidateName: string;
+  /** When true (collaborative PartyKit room), never emit [INTERVIEW_COMPLETE]; the host ends from the UI. */
+  collaborativeRoom?: boolean;
   agentInstructions?: string;
   uploadedFiles?: { name: string; type: string; text: string }[];
   notes?: string;
@@ -220,9 +222,18 @@ To assign a coding task, include it in your response using this EXACT JSON forma
 [CODING_TASK]{"title":"Task Title","description":"Detailed description of the task","starterCode":"// starter code here","language":"javascript"}[/CODING_TASK]
 
 After code is submitted for review (by the candidate in chat, or by the interviewer using the review action), evaluate it and provide feedback.
+${
+  config.collaborativeRoom
+    ? `
+
+COLLABORATIVE LIVE ROOM:
+- Do **not** include the marker [INTERVIEW_COMPLETE] in any reply. The human host ends the interview from the app when they are ready; you must not attempt to auto-close the session or tell the candidate the interview is officially over.
+- When the scheduled block runs out, the host can add more time — keep helping until they end the session from the UI.`
+    : `
 
 When the interview should end (after sufficient questions and at least one coding task), include this marker:
-[INTERVIEW_COMPLETE]
+[INTERVIEW_COMPLETE]`
+}
 
 Remember to be conversational and natural. Do not number your questions.`;
 
