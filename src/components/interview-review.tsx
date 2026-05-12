@@ -12,6 +12,12 @@ type SessionNotesGateProps = {
   value: string;
   onChange: (v: string) => void;
   minLength: number;
+  /**
+   * When true, notes are accepted as-is (no min-length gate). Used when a transcript is also
+   * present — notes are then optional but still pass through to the report as first-class
+   * evidence alongside the transcript.
+   */
+  optional?: boolean;
 };
 
 type Props = {
@@ -22,7 +28,9 @@ type Props = {
   /** Shown when the interviewer is in review but no report is in room state yet (e.g. refresh). */
   onRetryReport?: () => void;
   /**
-   * When set, the host must fill notes before retrying report generation (no usable transcript).
+   * When set, surfaces a host-only notes editor on the review screen. The notes feed the AI
+   * report alongside the spoken transcript (neither replaces the other). Required when no
+   * transcript was captured (`optional: false`); strictly additive otherwise.
    * Notes are not synced to the candidate.
    */
   sessionNotesGate?: SessionNotesGateProps;
@@ -102,10 +110,17 @@ export function InterviewReviewPanel({
                 <div className="rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 p-3 space-y-1.5">
                   <label className="text-xs font-medium text-amber-950 dark:text-amber-100">
                     Session notes for the AI report
-                    <span className="font-normal text-amber-900/90 dark:text-amber-200/90">
-                      {" "}
-                      — required (no live transcript). At least {sessionNotesGate.minLength} characters.
-                    </span>
+                    {sessionNotesGate.optional ? (
+                      <span className="font-normal text-zinc-700 dark:text-zinc-300">
+                        {" "}
+                        — optional. Used as primary evidence alongside the live transcript (neither replaces the other).
+                      </span>
+                    ) : (
+                      <span className="font-normal text-amber-900/90 dark:text-amber-200/90">
+                        {" "}
+                        — required (no live transcript was captured). At least {sessionNotesGate.minLength} characters.
+                      </span>
+                    )}
                   </label>
                   <textarea
                     value={sessionNotesGate.value}
@@ -114,11 +129,12 @@ export function InterviewReviewPanel({
                     rows={4}
                     className="w-full text-sm rounded-md border border-amber-200/90 dark:border-amber-800/80 bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                   />
-                  {sessionNotesGate.value.trim().length < sessionNotesGate.minLength && (
-                    <p className="text-[10px] text-amber-800 dark:text-amber-300">
-                      {sessionNotesGate.minLength - sessionNotesGate.value.trim().length} more characters needed.
-                    </p>
-                  )}
+                  {!sessionNotesGate.optional &&
+                    sessionNotesGate.value.trim().length < sessionNotesGate.minLength && (
+                      <p className="text-[10px] text-amber-800 dark:text-amber-300">
+                        {sessionNotesGate.minLength - sessionNotesGate.value.trim().length} more characters needed.
+                      </p>
+                    )}
                 </div>
               )}
               {onRetryReport && (
@@ -130,6 +146,7 @@ export function InterviewReviewPanel({
                   disabled={
                     Boolean(
                       sessionNotesGate &&
+                        !sessionNotesGate.optional &&
                         sessionNotesGate.value.trim().length < sessionNotesGate.minLength
                     )
                   }

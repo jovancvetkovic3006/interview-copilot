@@ -1196,11 +1196,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         role={participant?.role ?? "interviewer"}
         onRetryReport={isHost ? runReportGeneration : undefined}
         sessionNotesGate={
-          isHost && reportNeedsSessionNotes
+          isHost
             ? {
                 value: sessionReviewNotes,
                 onChange: setSessionReviewNotesPersisted,
                 minLength: MIN_INTERVIEWER_SESSION_NOTES_CHARS,
+                // When a transcript was captured, notes are accepted as additive evidence with
+                // no min-length gate. Otherwise we still require enough notes to ground the
+                // report (the API enforces the same threshold server-side).
+                optional: !reportNeedsSessionNotes,
               }
             : undefined
         }
@@ -1608,19 +1612,19 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             {reportNeedsSessionNotes ? (
               <span className="font-normal text-amber-900/90 dark:text-amber-200/90">
                 {" "}
-                — required when Record was not used (min. {MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters)
+                — required (no live transcript). Min. {MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters.
               </span>
             ) : (
               <span className="font-normal text-zinc-600 dark:text-zinc-400">
                 {" "}
-                — optional; adds context on top of the live transcript
+                — optional. Used as primary evidence alongside the live transcript (neither replaces the other).
               </span>
             )}
           </label>
           <textarea
             value={sessionReviewNotes}
             onChange={(e) => setSessionReviewNotesPersisted(e.target.value)}
-            placeholder="E.g. topics covered, how the candidate handled system design, concerns, strengths…"
+            placeholder="E.g. topics covered, how the candidate handled system design, off-mic discussion, concerns, strengths…"
             rows={3}
             className="w-full text-xs rounded-md border border-amber-200/90 dark:border-amber-800/80 bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40 max-h-32"
           />

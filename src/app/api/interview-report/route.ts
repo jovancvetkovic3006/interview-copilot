@@ -253,7 +253,7 @@ ${finalCodeBlock}
 FULL TYPED CHAT + AGENT (most recent last, truncated if huge):
 ${truncate(chatBlock, 70_000)}
 
-INTERVIEWER SESSION NOTES (private context when recording was not used, or extra context from the host):
+INTERVIEWER SESSION NOTES (host's first-person observations and impressions captured during or right after the interview — treat as **primary, first-class evidence**, equal in weight to the spoken transcript when both are present; never treat as fallback-only):
 ${sessionNotesTrimmed ? truncate(sessionNotesTrimmed, 16_000) : "(none provided)"}
 
 SPOKEN TRANSCRIPT (chronological, may contain STT errors):
@@ -262,14 +262,19 @@ ${spokenSection}
 SPEECH INSIGHT SNIPPETS (interviewer-only per-answer analyses captured live during the session):
 ${analysisBlock || "(none)"}
 
+EVIDENCE POLICY:
+- The **spoken transcript** and the **interviewer session notes** are **complementary**. When both are present, use **both** — they do not cancel each other out and you must not pick one and ignore the other. The transcript captures what was literally said (with possible STT noise); the notes capture the host's interpretation, off-mic discussion, body language cues, and judgement that the recording cannot show. Cross-reference them.
+- When only **one** of the two is present, lean on that one and say so once in the executive summary (e.g. "Based on interviewer notes only — no live recording was captured." or "Based on the spoken transcript — no additional interviewer notes were provided.").
+- Typed chat, speech-insight snippets, and the coding timeline are supporting evidence; treat them as such, not as substitutes for transcript or notes.
+
 Write a structured **Markdown** report suitable for PDF export. Include:
 1. Title with role/difficulty and candidate name if inferable
-2. Executive summary (5–8 bullets)
-3. **Coding summary** — Use **CODING TASK ASSIGNMENT TIMELINE** above. List every distinct exercise that was opened in the shared editor during this session **in order** (or state clearly if the timeline is empty / not supplied). For **each** entry: title, language, and task type when inferable from \`source\` (e.g. \`pre-interview-task\` = take-home submission pre-loaded, \`external-pre-task\` = pasted external PRE-TASK, omitted = typical live assignment). Summarize what was asked (from the description) and **how the candidate tackled it** — reasoning, approach, struggles, and outcomes — grounded in **chat**, **spoken transcript**, and **speech insight snippets**. If multiple tasks were used, compare briefly how performance shifted across them. If the timeline has only one row, still write this section in full.
-4. Strengths observed — base these on the structured transcript summary, chat, and (if present) interviewer session notes. Cite evidence (short verbatim quotes when possible).
-5. Gaps / risks / follow-up questions — same evidence requirement.
-6. **Coding depth (final editor state)** — The **FINAL CODE** block is a snapshot of the **last** active shared coding task only (not every prior exercise). Read it when present and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript may show their reasoning). Quote short snippets when calling out specific issues.
-7. Recommended decision hint (hire / no-hire / more rounds) — phrased as guidance for humans, not a command
+2. Executive summary (5–8 bullets) — note here which evidence sources were available (transcript / notes / both) so the reader knows what the report is grounded in.
+3. **Coding summary** — Use **CODING TASK ASSIGNMENT TIMELINE** above. List every distinct exercise that was opened in the shared editor during this session **in order** (or state clearly if the timeline is empty / not supplied). For **each** entry: title, language, and task type when inferable from \`source\` (e.g. \`pre-interview-task\` = take-home submission pre-loaded, \`external-pre-task\` = pasted external PRE-TASK, omitted = typical live assignment). Summarize what was asked (from the description) and **how the candidate tackled it** — reasoning, approach, struggles, and outcomes — grounded in **chat**, **spoken transcript**, **interviewer session notes**, and **speech insight snippets**. If multiple tasks were used, compare briefly how performance shifted across them. If the timeline has only one row, still write this section in full.
+4. **Strengths observed** — base these on **all** available evidence: the structured transcript summary, chat, **and the interviewer session notes**. When both transcript and notes are present, cite at least one observation grounded in the notes and at least one grounded in the transcript whenever possible. Use short verbatim quotes when supported.
+5. **Gaps / risks / follow-up questions** — same evidence requirement as Strengths. Notes often surface concerns the transcript will not show (off-mic confusion, hesitation, attitude); do not omit them.
+6. **Coding depth (final editor state)** — The **FINAL CODE** block is a snapshot of the **last** active shared coding task only (not every prior exercise). Read it when present and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript/notes may show their reasoning). Quote short snippets when calling out specific issues.
+7. Recommended decision hint (hire / no-hire / more rounds) — phrased as guidance for humans, not a command. Reflect both transcript and notes when both informed the decision.
 8. Optional: timeline table if useful
 
 LANGUAGE: The transcript / chat may be in Serbian (Cyrillic or Latin), English, or a mix.
