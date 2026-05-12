@@ -162,3 +162,96 @@ tasks:
     language: javascript
     difficulty: senior
     staticReview: true
+  - id: ct-be-ctx-1
+    title: '7-day moving average endpoint'
+    description: |-
+      What it is: Add a real endpoint to an existing service (junior/mid live task, ~30–45 min).
+
+      Context: MarkerService already exposes GetMarkerAveragesAsync. Product wants a 7-day moving
+      average for a specific HealthQuantityType.
+
+      Goal:
+      1. Add GetSevenDayMovingAverageAsync(Guid userId, HealthQuantityType type, DateOnly endDate)
+         to IMarkerService and implement it (LINQ over HealthKitQuantitySample, group by RecordDate).
+      2. Wire it up: GET /api/Markers/MovingAverage?type={type}&endDate={date}.
+      3. Return the daily averages for the 7 days ending at endDate as
+         { date: "2025-01-01", average: 8234.0 }.
+      4. 404 (NotFoundException) when no data exists in that window.
+
+      Evaluate:
+      - Correct async/await, no sync-over-async.
+      - Uses ICurrentUserContext (does not trust userId from query string).
+      - Registers the method on the interface before implementing.
+      - Controller follows existing [Route("api/Markers")] pattern.
+      - Sensible LINQ (Where + GroupBy + Average) — no in-memory load of all rows.
+
+      Finish when: Endpoint compiles, returns shaped DTO, 404 path covered, candidate explains the
+      query plan in plain English.
+    starterCode: |-
+      public interface IMarkerService
+      {
+          // Existing:
+          // Task<IReadOnlyList<MarkerAverageDto>> GetMarkerAveragesAsync(Guid userId, ...);
+
+          // TODO: add GetSevenDayMovingAverageAsync(...)
+      }
+
+      [ApiController]
+      [Route("api/Markers")]
+      public class MarkersController : ControllerBase
+      {
+          private readonly IMarkerService _markers;
+          private readonly ICurrentUserContext _user;
+
+          // TODO: GET MovingAverage?type=...&endDate=...
+      }
+    language: csharp
+    difficulty: mid
+  - id: ct-be-ctx-2
+    title: 'Design + implement: connector capability check'
+    description: |-
+      What it is: Design and implement a service-level check (mid/senior live task, ~45–60 min).
+
+      Context: The platform has 6 connectors. Each exposes different data types via
+      ConnectorCapabilities (Steps, HeartRate, Sleep, etc.). Product wants the API to return which
+      health metrics the current user can see based on their connected devices.
+
+      Goal:
+      1. GET /api/Users/Me/AvailableMetrics returns List<HealthQuantityType> the current user has
+         coverage for.
+      2. Implement GetAvailableMetricsForUserAsync(Guid userId) on a new or existing service.
+      3. Deduplicate (HashSet<HealthQuantityType> or .Distinct()) — Steps appears once even if two
+         connectors provide it.
+      4. At least 2 unit tests: (a) two connectors with overlapping capabilities, (b) user has no
+         connectors.
+      5. Do NOT call external connector APIs — derive from ConnectorAuth records + the static
+         ConnectorCapabilities map.
+
+      Evaluate:
+      - Reads ConnectorAuth for user's active connections.
+      - Uses ConnectorCapabilities to resolve supported types per connector.
+      - Service has an interface and is registered in DI.
+      - Controller uses ICurrentUserContext, passes userId to the service (no trust in route).
+      - Tests mock the repository (not the database).
+
+      Finish when: Endpoint, service, interface, DI registration, and 2 tests are green.
+    starterCode: |-
+      public interface IConnectorMetricsService
+      {
+          Task<IReadOnlyList<HealthQuantityType>> GetAvailableMetricsForUserAsync(Guid userId);
+      }
+
+      [ApiController]
+      [Route("api/Users/Me")]
+      public class UserMetricsController : ControllerBase
+      {
+          // TODO: inject service + ICurrentUserContext
+          // GET AvailableMetrics
+      }
+
+      // public static class ConnectorCapabilities
+      // {
+      //     public static IReadOnlyDictionary<ConnectorType, HealthQuantityType[]> Map { get; }
+      // }
+    language: csharp
+    difficulty: senior

@@ -115,3 +115,90 @@ questions:
     category: Leadership
     levels:
       - lead
+  - id: be-ctx-1
+    question: >-
+      Every service in this codebase has a corresponding I{Name}Service interface. What are the
+      concrete benefits of always programming to an interface in a .NET DI container, and when —
+      if ever — would you skip the interface?
+    category: .NET / DI
+    levels:
+      - mid
+      - senior
+  - id: be-ctx-2
+    question: >-
+      A service loads a list of MarkerType entities, then for each one separately queries its
+      ReferenceRanges. The page shows 80 marker types. Walk me through what's happening under the
+      hood with EF Core and how you'd fix it.
+    category: EF Core / Performance
+    levels:
+      - mid
+      - senior
+  - id: be-ctx-3
+    question: >-
+      Our PostgreSQL database uses Row Level Security to enforce tenant isolation. Describe how
+      RLS works at the database level, what breaks when you forget to disable it in a migration's
+      Up() method, and one failure mode that RLS doesn't protect against.
+    category: PostgreSQL / Security
+    levels:
+      - senior
+  - id: be-ctx-4
+    question: >-
+      You're reviewing a PR and see Task.Result called on an async method inside an ASP.NET Core
+      controller action. What's wrong with this, and how would you fix it?
+    category: .NET / Async
+    levels:
+      - mid
+  - id: be-ctx-5
+    question: >-
+      We process connector webhooks via Azure Queue Storage. A message is dequeued, processing
+      throws halfway through, the message is retried 3 more times and lands in the poison queue.
+      How would you build a retry strategy that's both resilient and doesn't create duplicate
+      health-data records?
+    category: Messaging / Reliability
+    levels:
+      - senior
+  - id: be-ctx-6
+    question: >-
+      The platform supports three tenants from a single codebase, resolved via a TENANT
+      environment variable at startup. What are the risks of this approach at scale, and what
+      would you change if you needed to onboard 50 tenants?
+    category: Multi-tenancy / Architecture
+    levels:
+      - senior
+      - lead
+  - id: be-ctx-7
+    question: >-
+      The codebase has v1, v2, and v3 endpoints. A mobile client is pinned to v2 for six months
+      after you release v3. How do you manage that without duplicating the entire controller, and
+      what's your deprecation policy?
+    category: APIs / Versioning
+    levels:
+      - senior
+  - id: be-q-1
+    question: 'Quick: What''s the difference between IEnumerable<T> and IQueryable<T> in EF Core?'
+    category: .NET / EF Core
+    levels:
+      - junior
+      - mid
+  - id: be-q-2
+    question: 'Quick: What does `async void` do wrong that `async Task` doesn''t?'
+    category: .NET / Async
+    levels:
+      - junior
+      - mid
+  - id: be-q-3
+    question: >-
+      Quick: You await two independent async calls sequentially. How do you run them in parallel,
+      and how does Task.WhenAll differ from `await t1; await t2`?
+    category: .NET / Async
+    levels:
+      - junior
+      - mid
+  - id: be-q-4
+    question: >-
+      Quick: What's the purpose of a database migration's Down() method, and when would rolling
+      back a migration be dangerous?
+    category: Databases / Migrations
+    levels:
+      - mid
+      - senior

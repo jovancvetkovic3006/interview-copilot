@@ -198,3 +198,32 @@ questions:
     levels:
       - lead
     strand: frontend
+  - id: fs-ctx-1
+    question: >-
+      A user connects their Fitbit account. Walk me through every layer — from the OAuth callback
+      hitting the backend, to a step-count chart appearing in the dashboard — naming the actual
+      components and patterns involved (auth storage, sync trigger, queue, mapper, persistence,
+      aggregation service, FE query hook, chart re-render).
+    category: End-to-end flow
+    levels:
+      - senior
+      - lead
+    strand: fullstack
+  - id: fs-ctx-2
+    question: >-
+      When the FE makes an API call to /api/Markers, describe exactly how the request is
+      authenticated on both sides — what the frontend sends, what the backend validates (issuer,
+      audience, signature, user resolution), and what happens when the token has expired.
+    category: Auth
+    levels:
+      - senior
+    strand: fullstack
+  - id: fs-ctx-3
+    question: >-
+      A health-device platform sends a webhook when new data is available; we put it on an Azure
+      Queue. Two identical webhooks arrive within 1 second (duplicate delivery). How do you ensure
+      the data lands exactly once in the database?
+    category: Webhooks / Idempotency
+    levels:
+      - senior
+    strand: fullstack

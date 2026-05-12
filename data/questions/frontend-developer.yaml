@@ -121,3 +121,73 @@ questions:
     category: Leadership
     levels:
       - lead
+  - id: fe-ctx-1
+    question: >-
+      Next.js App Router distinguishes Server Components from Client Components. Given a page that
+      shows a user's health-marker chart — fetched from our API, with interactive date-range
+      filters — how would you split it into server and client components and why?
+    category: Next.js / RSC
+    levels:
+      - mid
+      - senior
+  - id: fe-ctx-2
+    question: >-
+      A user submits a new lab result. The mutation succeeds. Two components on the page — a
+      results list and a dashboard summary count — are still showing stale data. How do you ensure
+      both update after the mutation completes (React Query)?
+    category: React Query
+    levels:
+      - mid
+  - id: fe-ctx-3
+    question: >-
+      The app uses both React Query and Zustand. A new engineer wants to store the "currently
+      selected patient" as a React Query server-state query. Explain why that's the wrong tool,
+      what should go in Zustand instead, and give a rule of thumb for which store to use.
+    category: State management
+    levels:
+      - mid
+  - id: fe-ctx-4
+    question: >-
+      The chat assistant streams responses via Server-Sent Events. A user opens a chat, starts a
+      message, then navigates away mid-stream. What happens if you don't handle this, and how do
+      you clean up properly?
+    category: SSE / Effects
+    levels:
+      - senior
+  - id: fe-ctx-5
+    question: >-
+      An API response can be Success { data } or Error { message }. A colleague types it as `{
+      data?: HealthMarker; message?: string }`. What's wrong with this, and how would you type it
+      correctly?
+    category: TypeScript
+    levels:
+      - mid
+  - id: fe-ctx-6
+    question: >-
+      A parent passes a `filters` object `{ from: Date, to: Date }` as a prop to a chart. The user
+      types in an unrelated search box in the same parent, the parent re-renders, and the chart
+      re-renders even though `filters` didn't change. How do you fix this?
+    category: React / Performance
+    levels:
+      - senior
+  - id: fe-q-1
+    question: 'Quick: In React Query, what does `staleTime: Infinity` mean?'
+    category: React Query
+    levels:
+      - junior
+      - mid
+  - id: fe-q-2
+    question: >-
+      Quick: What's a React `key` prop for, and what goes wrong if you use the array index as the
+      key?
+    category: React
+    levels:
+      - junior
+      - mid
+  - id: fe-q-3
+    question: >-
+      Quick: `useEffect(() => { fetchData() }, [])` updates state, then the component unmounts
+      before the fetch completes. What error appears and how do you prevent it?
+    category: React / Effects
+    levels:
+      - mid

@@ -233,6 +233,101 @@ export const PREDEFINED_QUESTIONS: Record<string, PredefinedQuestion[]> = {
       "levels": [
         "lead"
       ]
+    },
+    {
+      "id": "be-ctx-1",
+      "question": "Every service in this codebase has a corresponding I{Name}Service interface. What are the concrete benefits of always programming to an interface in a .NET DI container, and when — if ever — would you skip the interface?",
+      "category": ".NET / DI",
+      "levels": [
+        "mid",
+        "senior"
+      ]
+    },
+    {
+      "id": "be-ctx-2",
+      "question": "A service loads a list of MarkerType entities, then for each one separately queries its ReferenceRanges. The page shows 80 marker types. Walk me through what's happening under the hood with EF Core and how you'd fix it.",
+      "category": "EF Core / Performance",
+      "levels": [
+        "mid",
+        "senior"
+      ]
+    },
+    {
+      "id": "be-ctx-3",
+      "question": "Our PostgreSQL database uses Row Level Security to enforce tenant isolation. Describe how RLS works at the database level, what breaks when you forget to disable it in a migration's Up() method, and one failure mode that RLS doesn't protect against.",
+      "category": "PostgreSQL / Security",
+      "levels": [
+        "senior"
+      ]
+    },
+    {
+      "id": "be-ctx-4",
+      "question": "You're reviewing a PR and see Task.Result called on an async method inside an ASP.NET Core controller action. What's wrong with this, and how would you fix it?",
+      "category": ".NET / Async",
+      "levels": [
+        "mid"
+      ]
+    },
+    {
+      "id": "be-ctx-5",
+      "question": "We process connector webhooks via Azure Queue Storage. A message is dequeued, processing throws halfway through, the message is retried 3 more times and lands in the poison queue. How would you build a retry strategy that's both resilient and doesn't create duplicate health-data records?",
+      "category": "Messaging / Reliability",
+      "levels": [
+        "senior"
+      ]
+    },
+    {
+      "id": "be-ctx-6",
+      "question": "The platform supports three tenants from a single codebase, resolved via a TENANT environment variable at startup. What are the risks of this approach at scale, and what would you change if you needed to onboard 50 tenants?",
+      "category": "Multi-tenancy / Architecture",
+      "levels": [
+        "senior",
+        "lead"
+      ]
+    },
+    {
+      "id": "be-ctx-7",
+      "question": "The codebase has v1, v2, and v3 endpoints. A mobile client is pinned to v2 for six months after you release v3. How do you manage that without duplicating the entire controller, and what's your deprecation policy?",
+      "category": "APIs / Versioning",
+      "levels": [
+        "senior"
+      ]
+    },
+    {
+      "id": "be-q-1",
+      "question": "Quick: What's the difference between IEnumerable<T> and IQueryable<T> in EF Core?",
+      "category": ".NET / EF Core",
+      "levels": [
+        "junior",
+        "mid"
+      ]
+    },
+    {
+      "id": "be-q-2",
+      "question": "Quick: What does `async void` do wrong that `async Task` doesn't?",
+      "category": ".NET / Async",
+      "levels": [
+        "junior",
+        "mid"
+      ]
+    },
+    {
+      "id": "be-q-3",
+      "question": "Quick: You await two independent async calls sequentially. How do you run them in parallel, and how does Task.WhenAll differ from `await t1; await t2`?",
+      "category": ".NET / Async",
+      "levels": [
+        "junior",
+        "mid"
+      ]
+    },
+    {
+      "id": "be-q-4",
+      "question": "Quick: What's the purpose of a database migration's Down() method, and when would rolling back a migration be dangerous?",
+      "category": "Databases / Migrations",
+      "levels": [
+        "mid",
+        "senior"
+      ]
     }
   ],
   "Data Engineer": [
@@ -625,6 +720,81 @@ export const PREDEFINED_QUESTIONS: Record<string, PredefinedQuestion[]> = {
       "levels": [
         "lead"
       ]
+    },
+    {
+      "id": "fe-ctx-1",
+      "question": "Next.js App Router distinguishes Server Components from Client Components. Given a page that shows a user's health-marker chart — fetched from our API, with interactive date-range filters — how would you split it into server and client components and why?",
+      "category": "Next.js / RSC",
+      "levels": [
+        "mid",
+        "senior"
+      ]
+    },
+    {
+      "id": "fe-ctx-2",
+      "question": "A user submits a new lab result. The mutation succeeds. Two components on the page — a results list and a dashboard summary count — are still showing stale data. How do you ensure both update after the mutation completes (React Query)?",
+      "category": "React Query",
+      "levels": [
+        "mid"
+      ]
+    },
+    {
+      "id": "fe-ctx-3",
+      "question": "The app uses both React Query and Zustand. A new engineer wants to store the \"currently selected patient\" as a React Query server-state query. Explain why that's the wrong tool, what should go in Zustand instead, and give a rule of thumb for which store to use.",
+      "category": "State management",
+      "levels": [
+        "mid"
+      ]
+    },
+    {
+      "id": "fe-ctx-4",
+      "question": "The chat assistant streams responses via Server-Sent Events. A user opens a chat, starts a message, then navigates away mid-stream. What happens if you don't handle this, and how do you clean up properly?",
+      "category": "SSE / Effects",
+      "levels": [
+        "senior"
+      ]
+    },
+    {
+      "id": "fe-ctx-5",
+      "question": "An API response can be Success { data } or Error { message }. A colleague types it as `{ data?: HealthMarker; message?: string }`. What's wrong with this, and how would you type it correctly?",
+      "category": "TypeScript",
+      "levels": [
+        "mid"
+      ]
+    },
+    {
+      "id": "fe-ctx-6",
+      "question": "A parent passes a `filters` object `{ from: Date, to: Date }` as a prop to a chart. The user types in an unrelated search box in the same parent, the parent re-renders, and the chart re-renders even though `filters` didn't change. How do you fix this?",
+      "category": "React / Performance",
+      "levels": [
+        "senior"
+      ]
+    },
+    {
+      "id": "fe-q-1",
+      "question": "Quick: In React Query, what does `staleTime: Infinity` mean?",
+      "category": "React Query",
+      "levels": [
+        "junior",
+        "mid"
+      ]
+    },
+    {
+      "id": "fe-q-2",
+      "question": "Quick: What's a React `key` prop for, and what goes wrong if you use the array index as the key?",
+      "category": "React",
+      "levels": [
+        "junior",
+        "mid"
+      ]
+    },
+    {
+      "id": "fe-q-3",
+      "question": "Quick: `useEffect(() => { fetchData() }, [])` updates state, then the component unmounts before the fetch completes. What error appears and how do you prevent it?",
+      "category": "React / Effects",
+      "levels": [
+        "mid"
+      ]
     }
   ],
   "Full Stack Developer": [
@@ -909,6 +1079,34 @@ export const PREDEFINED_QUESTIONS: Record<string, PredefinedQuestion[]> = {
         "lead"
       ],
       "strand": "frontend"
+    },
+    {
+      "id": "fs-ctx-1",
+      "question": "A user connects their Fitbit account. Walk me through every layer — from the OAuth callback hitting the backend, to a step-count chart appearing in the dashboard — naming the actual components and patterns involved (auth storage, sync trigger, queue, mapper, persistence, aggregation service, FE query hook, chart re-render).",
+      "category": "End-to-end flow",
+      "levels": [
+        "senior",
+        "lead"
+      ],
+      "strand": "fullstack"
+    },
+    {
+      "id": "fs-ctx-2",
+      "question": "When the FE makes an API call to /api/Markers, describe exactly how the request is authenticated on both sides — what the frontend sends, what the backend validates (issuer, audience, signature, user resolution), and what happens when the token has expired.",
+      "category": "Auth",
+      "levels": [
+        "senior"
+      ],
+      "strand": "fullstack"
+    },
+    {
+      "id": "fs-ctx-3",
+      "question": "A health-device platform sends a webhook when new data is available; we put it on an Azure Queue. Two identical webhooks arrive within 1 second (duplicate delivery). How do you ensure the data lands exactly once in the database?",
+      "category": "Webhooks / Idempotency",
+      "levels": [
+        "senior"
+      ],
+      "strand": "fullstack"
     }
   ],
   "iOS Developer": [
@@ -1205,6 +1403,22 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
       "language": "javascript",
       "difficulty": "senior",
       "staticReview": true
+    },
+    {
+      "id": "ct-be-ctx-1",
+      "title": "7-day moving average endpoint",
+      "description": "What it is: Add a real endpoint to an existing service (junior/mid live task, ~30–45 min).\n\nContext: MarkerService already exposes GetMarkerAveragesAsync. Product wants a 7-day moving\naverage for a specific HealthQuantityType.\n\nGoal:\n1. Add GetSevenDayMovingAverageAsync(Guid userId, HealthQuantityType type, DateOnly endDate)\n   to IMarkerService and implement it (LINQ over HealthKitQuantitySample, group by RecordDate).\n2. Wire it up: GET /api/Markers/MovingAverage?type={type}&endDate={date}.\n3. Return the daily averages for the 7 days ending at endDate as\n   { date: \"2025-01-01\", average: 8234.0 }.\n4. 404 (NotFoundException) when no data exists in that window.\n\nEvaluate:\n- Correct async/await, no sync-over-async.\n- Uses ICurrentUserContext (does not trust userId from query string).\n- Registers the method on the interface before implementing.\n- Controller follows existing [Route(\"api/Markers\")] pattern.\n- Sensible LINQ (Where + GroupBy + Average) — no in-memory load of all rows.\n\nFinish when: Endpoint compiles, returns shaped DTO, 404 path covered, candidate explains the\nquery plan in plain English.",
+      "starterCode": "public interface IMarkerService\n{\n    // Existing:\n    // Task<IReadOnlyList<MarkerAverageDto>> GetMarkerAveragesAsync(Guid userId, ...);\n\n    // TODO: add GetSevenDayMovingAverageAsync(...)\n}\n\n[ApiController]\n[Route(\"api/Markers\")]\npublic class MarkersController : ControllerBase\n{\n    private readonly IMarkerService _markers;\n    private readonly ICurrentUserContext _user;\n\n    // TODO: GET MovingAverage?type=...&endDate=...\n}",
+      "language": "csharp",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-be-ctx-2",
+      "title": "Design + implement: connector capability check",
+      "description": "What it is: Design and implement a service-level check (mid/senior live task, ~45–60 min).\n\nContext: The platform has 6 connectors. Each exposes different data types via\nConnectorCapabilities (Steps, HeartRate, Sleep, etc.). Product wants the API to return which\nhealth metrics the current user can see based on their connected devices.\n\nGoal:\n1. GET /api/Users/Me/AvailableMetrics returns List<HealthQuantityType> the current user has\n   coverage for.\n2. Implement GetAvailableMetricsForUserAsync(Guid userId) on a new or existing service.\n3. Deduplicate (HashSet<HealthQuantityType> or .Distinct()) — Steps appears once even if two\n   connectors provide it.\n4. At least 2 unit tests: (a) two connectors with overlapping capabilities, (b) user has no\n   connectors.\n5. Do NOT call external connector APIs — derive from ConnectorAuth records + the static\n   ConnectorCapabilities map.\n\nEvaluate:\n- Reads ConnectorAuth for user's active connections.\n- Uses ConnectorCapabilities to resolve supported types per connector.\n- Service has an interface and is registered in DI.\n- Controller uses ICurrentUserContext, passes userId to the service (no trust in route).\n- Tests mock the repository (not the database).\n\nFinish when: Endpoint, service, interface, DI registration, and 2 tests are green.",
+      "starterCode": "public interface IConnectorMetricsService\n{\n    Task<IReadOnlyList<HealthQuantityType>> GetAvailableMetricsForUserAsync(Guid userId);\n}\n\n[ApiController]\n[Route(\"api/Users/Me\")]\npublic class UserMetricsController : ControllerBase\n{\n    // TODO: inject service + ICurrentUserContext\n    // GET AvailableMetrics\n}\n\n// public static class ConnectorCapabilities\n// {\n//     public static IReadOnlyDictionary<ConnectorType, HealthQuantityType[]> Map { get; }\n// }",
+      "language": "csharp",
+      "difficulty": "senior"
     }
   ],
   "Data Engineer": [
@@ -1366,6 +1580,22 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
       "language": "javascript",
       "difficulty": "senior",
       "staticReview": true
+    },
+    {
+      "id": "ct-fe-ctx-1",
+      "title": "useRecentMarkers hook + RecentMarkersPanel",
+      "description": "What it is: A custom React Query hook + a small panel component (junior/mid live task,\n~30–45 min).\n\nContext: The dashboard needs a panel showing the user's most recent values for 5 fixed\nmarker types (steps, heart rate, sleep duration, weight, HRV). Data is available at\nGET /api/Markers/Summary?from=&to= and returns rows like\n`{ type: HealthQuantityType; value: number; unit: string; recordedAt: string }`.\n\nGoal:\n1. Create useRecentMarkers(markerTypes: HealthQuantityType[]) in src/hooks/queries/.\n   Use React Query with a sensible staleTime (and document the choice).\n2. Build RecentMarkersPanel that calls the hook and renders the 5 markers as a list:\n   name, value, unit.\n3. Loading skeleton while fetching, error state if the request fails.\n4. TypeScript — no `any`.\n\nEvaluate:\n- Query-key factory pattern (e.g. `markerKeys.recent(types)`), not an inline string.\n- staleTime choice with reasoning (\"data refreshes every 4 h via autosync, so 5 min is fine\").\n- Loading + error states actually rendered (not ignored).\n- Component is `'use client'`.\n- Properly typed response shape.\n- No useState + useEffect manual fetch — uses React Query.\n\nFinish when: Panel renders 5 markers from a mocked endpoint, loading + error states demoed.",
+      "starterCode": "// src/hooks/queries/use-recent-markers.ts\n// export function useRecentMarkers(markerTypes: HealthQuantityType[]) { ... }\n\n'use client';\n\n// src/components/recent-markers-panel.tsx\n// export function RecentMarkersPanel() { ... }",
+      "language": "typescript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-fe-ctx-2",
+      "title": "SSE streaming hook + QuickInsightCard",
+      "description": "What it is: A streaming text component using Server-Sent Events (mid/senior live task,\n~45–60 min).\n\nContext: The chat assistant streams AI responses via SSE. Build a simpler version for a new\n\"Quick Insight\" feature.\n\nGoal:\n1. useQuickInsightStream(prompt: string) — opens an SSE connection to\n   /api/insights/stream?prompt={prompt}, accumulates streamed chunks, and returns\n   `{ text: string; isStreaming: boolean; error: Error | null }`.\n2. Cleanup the connection when the component unmounts OR when prompt changes.\n3. QuickInsightCard accepts `prompt: string`, calls the hook, and renders:\n   - \"Thinking…\" skeleton while connecting.\n   - Accumulated text as it streams (character-by-character is fine).\n   - Error message on failure.\n   - \"Regenerate\" button that re-fires the hook.\n4. TypeScript — no `any`.\n\nEvaluate:\n- AbortController (or EventSource.close) wired into the useEffect cleanup.\n- Re-runs when prompt changes (dep array correct).\n- Accumulated text via functional setState (`setText((t) => t + chunk)`), not replacement.\n- EventSource OR fetch + ReadableStream — either is valid; ask why they chose it.\n- \"Regenerate\" triggers a new stream without navigating.\n- Error path renders inline; component does not crash.\n\nFinish when: Streaming text renders, navigating away cancels the request (verify in\nnetwork tab), Regenerate restarts the stream cleanly.",
+      "starterCode": "'use client';\n\n// src/hooks/use-quick-insight-stream.ts\n// export function useQuickInsightStream(prompt: string): {\n//   text: string;\n//   isStreaming: boolean;\n//   error: Error | null;\n// } { ... }\n\n// src/components/quick-insight-card.tsx\n// export function QuickInsightCard({ prompt }: { prompt: string }) { ... }",
+      "language": "typescript",
+      "difficulty": "senior"
     }
   ],
   "Full Stack Developer": [
@@ -1466,6 +1696,16 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
       "difficulty": "mid",
       "staticReview": true,
       "strand": "frontend"
+    },
+    {
+      "id": "ct-fs-ctx-1",
+      "title": "System design: multi-source health data aggregation",
+      "description": "What it is: Whiteboard-style system design (~30 min). No coding — sketch types, schemas,\nand resolution rules in the editor as comments / pseudo-code.\n\nScenario: A patient has Fitbit (autosync every 4h), Apple HealthKit (push from iOS app on\ndemand), and a manual lab result entered in the UI. The dashboard's \"Today\" view must show\na single step count, even though Fitbit and HealthKit both report steps and they overlap.\n\nGoal — design:\n1. How do you store samples from multiple sources without losing provenance?\n   (source / connector_type column, recorded_at, raw_value, normalized unit, etc.)\n2. How do you resolve conflicts (Fitbit says 8,000, HealthKit says 8,400 for the same day)?\n   At write time vs. at query time — what are the trade-offs?\n3. How does UserPreference.DataSourceOverride per HealthQuantityType get applied at query\n   time vs. write time, and how does it interact with the aggregation service?\n4. How does the FE know which source the displayed value came from, and how does the user\n   override it (DTO shape, mutation endpoint, UI affordance)?\n\nEvaluate:\n- Identifies that samples need a provenance field (source / connector_type).\n- Resolution at query time (flexible — user can change preference without re-sync) vs. at\n  write time (simpler but irreversible) — articulates the trade-off.\n- Per-HealthQuantityType override, not a global preference.\n- DTO includes `source`, FE shows a source badge, mutation PUT /api/UserPreferences/...\n- Identifies edge cases: both sources return 0 for a day (no movement) vs. one source\n  missing entirely.\n\nFinish when: There's a clear data model, a deterministic resolution algorithm, and the\ncandidate has reasoned about at least one edge case.",
+      "starterCode": "// Sketch the design here — types, table columns, resolution algorithm, DTO shape, mutation.\n//\n// 1) Storage model:\n//    HealthKitQuantitySample { id, user_id, type, value, unit, recorded_at, source, ... }\n//\n// 2) Resolution algorithm:\n//    given (user, type, day) -> pick winning sample using ...\n//\n// 3) UserPreference.DataSourceOverride[type] -> applied where?\n//\n// 4) DTO + FE override flow:\n//    GET /api/Markers/Today  -> { value, unit, source, alternatives: [...] }\n//    PUT /api/UserPreferences/DataSource { type, source }\n",
+      "language": "typescript",
+      "difficulty": "senior",
+      "staticReview": true,
+      "strand": "fullstack"
     }
   ],
   "General": [

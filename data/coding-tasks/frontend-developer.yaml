@@ -194,3 +194,86 @@ tasks:
     language: javascript
     difficulty: senior
     staticReview: true
+  - id: ct-fe-ctx-1
+    title: 'useRecentMarkers hook + RecentMarkersPanel'
+    description: |-
+      What it is: A custom React Query hook + a small panel component (junior/mid live task,
+      ~30–45 min).
+
+      Context: The dashboard needs a panel showing the user's most recent values for 5 fixed
+      marker types (steps, heart rate, sleep duration, weight, HRV). Data is available at
+      GET /api/Markers/Summary?from=&to= and returns rows like
+      `{ type: HealthQuantityType; value: number; unit: string; recordedAt: string }`.
+
+      Goal:
+      1. Create useRecentMarkers(markerTypes: HealthQuantityType[]) in src/hooks/queries/.
+         Use React Query with a sensible staleTime (and document the choice).
+      2. Build RecentMarkersPanel that calls the hook and renders the 5 markers as a list:
+         name, value, unit.
+      3. Loading skeleton while fetching, error state if the request fails.
+      4. TypeScript — no `any`.
+
+      Evaluate:
+      - Query-key factory pattern (e.g. `markerKeys.recent(types)`), not an inline string.
+      - staleTime choice with reasoning ("data refreshes every 4 h via autosync, so 5 min is fine").
+      - Loading + error states actually rendered (not ignored).
+      - Component is `'use client'`.
+      - Properly typed response shape.
+      - No useState + useEffect manual fetch — uses React Query.
+
+      Finish when: Panel renders 5 markers from a mocked endpoint, loading + error states demoed.
+    starterCode: |-
+      // src/hooks/queries/use-recent-markers.ts
+      // export function useRecentMarkers(markerTypes: HealthQuantityType[]) { ... }
+
+      'use client';
+
+      // src/components/recent-markers-panel.tsx
+      // export function RecentMarkersPanel() { ... }
+    language: typescript
+    difficulty: mid
+  - id: ct-fe-ctx-2
+    title: 'SSE streaming hook + QuickInsightCard'
+    description: |-
+      What it is: A streaming text component using Server-Sent Events (mid/senior live task,
+      ~45–60 min).
+
+      Context: The chat assistant streams AI responses via SSE. Build a simpler version for a new
+      "Quick Insight" feature.
+
+      Goal:
+      1. useQuickInsightStream(prompt: string) — opens an SSE connection to
+         /api/insights/stream?prompt={prompt}, accumulates streamed chunks, and returns
+         `{ text: string; isStreaming: boolean; error: Error | null }`.
+      2. Cleanup the connection when the component unmounts OR when prompt changes.
+      3. QuickInsightCard accepts `prompt: string`, calls the hook, and renders:
+         - "Thinking…" skeleton while connecting.
+         - Accumulated text as it streams (character-by-character is fine).
+         - Error message on failure.
+         - "Regenerate" button that re-fires the hook.
+      4. TypeScript — no `any`.
+
+      Evaluate:
+      - AbortController (or EventSource.close) wired into the useEffect cleanup.
+      - Re-runs when prompt changes (dep array correct).
+      - Accumulated text via functional setState (`setText((t) => t + chunk)`), not replacement.
+      - EventSource OR fetch + ReadableStream — either is valid; ask why they chose it.
+      - "Regenerate" triggers a new stream without navigating.
+      - Error path renders inline; component does not crash.
+
+      Finish when: Streaming text renders, navigating away cancels the request (verify in
+      network tab), Regenerate restarts the stream cleanly.
+    starterCode: |-
+      'use client';
+
+      // src/hooks/use-quick-insight-stream.ts
+      // export function useQuickInsightStream(prompt: string): {
+      //   text: string;
+      //   isStreaming: boolean;
+      //   error: Error | null;
+      // } { ... }
+
+      // src/components/quick-insight-card.tsx
+      // export function QuickInsightCard({ prompt }: { prompt: string }) { ... }
+    language: typescript
+    difficulty: senior

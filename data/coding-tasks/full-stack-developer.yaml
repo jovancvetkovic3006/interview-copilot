@@ -237,3 +237,52 @@ tasks:
     difficulty: mid
     staticReview: true
     strand: frontend
+  - id: ct-fs-ctx-1
+    title: 'System design: multi-source health data aggregation'
+    description: |-
+      What it is: Whiteboard-style system design (~30 min). No coding — sketch types, schemas,
+      and resolution rules in the editor as comments / pseudo-code.
+
+      Scenario: A patient has Fitbit (autosync every 4h), Apple HealthKit (push from iOS app on
+      demand), and a manual lab result entered in the UI. The dashboard's "Today" view must show
+      a single step count, even though Fitbit and HealthKit both report steps and they overlap.
+
+      Goal — design:
+      1. How do you store samples from multiple sources without losing provenance?
+         (source / connector_type column, recorded_at, raw_value, normalized unit, etc.)
+      2. How do you resolve conflicts (Fitbit says 8,000, HealthKit says 8,400 for the same day)?
+         At write time vs. at query time — what are the trade-offs?
+      3. How does UserPreference.DataSourceOverride per HealthQuantityType get applied at query
+         time vs. write time, and how does it interact with the aggregation service?
+      4. How does the FE know which source the displayed value came from, and how does the user
+         override it (DTO shape, mutation endpoint, UI affordance)?
+
+      Evaluate:
+      - Identifies that samples need a provenance field (source / connector_type).
+      - Resolution at query time (flexible — user can change preference without re-sync) vs. at
+        write time (simpler but irreversible) — articulates the trade-off.
+      - Per-HealthQuantityType override, not a global preference.
+      - DTO includes `source`, FE shows a source badge, mutation PUT /api/UserPreferences/...
+      - Identifies edge cases: both sources return 0 for a day (no movement) vs. one source
+        missing entirely.
+
+      Finish when: There's a clear data model, a deterministic resolution algorithm, and the
+      candidate has reasoned about at least one edge case.
+    starterCode: |
+      // Sketch the design here — types, table columns, resolution algorithm, DTO shape, mutation.
+      //
+      // 1) Storage model:
+      //    HealthKitQuantitySample { id, user_id, type, value, unit, recorded_at, source, ... }
+      //
+      // 2) Resolution algorithm:
+      //    given (user, type, day) -> pick winning sample using ...
+      //
+      // 3) UserPreference.DataSourceOverride[type] -> applied where?
+      //
+      // 4) DTO + FE override flow:
+      //    GET /api/Markers/Today  -> { value, unit, source, alternatives: [...] }
+      //    PUT /api/UserPreferences/DataSource { type, source }
+    language: typescript
+    difficulty: senior
+    staticReview: true
+    strand: fullstack
