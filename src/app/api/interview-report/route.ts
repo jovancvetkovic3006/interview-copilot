@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       finalCode,
       transcriptSummary: clientProvidedSummary,
       interviewerSessionNotes,
+      codingTaskHistory,
     } = body as {
       roomCode?: string;
       participants?: { name: string; role: string }[];
@@ -90,6 +91,11 @@ export async function POST(req: NextRequest) {
        * has spoken-signal context.
        */
       interviewerSessionNotes?: string;
+      /**
+       * Chronological list of distinct coding tasks opened in the room (host client), for a
+       * dedicated "Coding summary" section in the report.
+       */
+      codingTaskHistory?: unknown[];
     };
 
     const chatBlock = (messages ?? [])
@@ -104,6 +110,32 @@ export async function POST(req: NextRequest) {
     const participantsBlock = (participants ?? []).map((p) => `- ${p.name} (${p.role})`).join("\n");
     const configStr = truncate(JSON.stringify(config ?? {}, null, 2), 12_000);
     const codingStr = truncate(JSON.stringify(codingTask ?? null, null, 2), 8000);
+
+    const rawHistory = Array.isArray(codingTaskHistory) ? codingTaskHistory : [];
+    const codingTaskHistorySanitized: Record<string, unknown>[] = [];
+    for (const entry of rawHistory.slice(0, 40)) {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const e = entry as Record<string, unknown>;
+      const title = typeof e.title === "string" ? e.title.trim() : "";
+      if (!title) continue;
+      const row: Record<string, unknown> = {
+        title: truncate(title, 400),
+        description: truncate(typeof e.description === "string" ? e.description : "", 8000),
+        language:
+          typeof e.language === "string" && e.language.trim() ? e.language.trim().slice(0, 48) : "text",
+      };
+      if (typeof e.collaborationTaskId === "string" && e.collaborationTaskId.trim()) {
+        row.collaborationTaskId = e.collaborationTaskId.trim().slice(0, 80);
+      }
+      if (typeof e.source === "string" && e.source.trim()) {
+        row.source = e.source.trim().slice(0, 80);
+      }
+      if (typeof e.recordedAt === "number" && Number.isFinite(e.recordedAt)) {
+        row.recordedAt = e.recordedAt;
+      }
+      codingTaskHistorySanitized.push(row);
+    }
+    const codingTaskHistoryStr = truncate(JSON.stringify(codingTaskHistorySanitized, null, 2), 100_000);
 
     // Coding task language is used as the fenced-code block hint for `finalCode` so the model
     // (and any reader of the report) can syntax-reason about it. Falls back to "text".
@@ -209,8 +241,11 @@ ${participantsBlock || "(none)"}
 INTERVIEW CONFIG (JSON):
 ${configStr}
 
-CODING TASK METADATA (the assigned task definition):
+CODING TASK METADATA (the last assigned task definition — same as the final editor context unless no task was open):
 ${codingStr}
+
+CODING TASK ASSIGNMENT TIMELINE (chronological — each time a **new** shared-editor exercise was opened in the room; use this for the report's **Coding summary** section. The optional \`source\` field distinguishes e.g. take-home preload vs external PRE-TASK vs a normal live assignment):
+${codingTaskHistorySanitized.length > 0 ? codingTaskHistoryStr : "(no timeline rows supplied — infer coding work only from chat, transcript, and the single-task metadata above)"}
 
 FINAL CODE FROM THE SHARED IN-ROOM EDITOR (the candidate's actual code at end-of-interview, including any edits made to a pre-loaded take-home submission):
 ${finalCodeBlock}
@@ -230,11 +265,12 @@ ${analysisBlock || "(none)"}
 Write a structured **Markdown** report suitable for PDF export. Include:
 1. Title with role/difficulty and candidate name if inferable
 2. Executive summary (5–8 bullets)
-3. Strengths observed — base these on the structured transcript summary, chat, and (if present) interviewer session notes. Cite evidence (short verbatim quotes when possible).
-4. Gaps / risks / follow-up questions — same evidence requirement.
-5. Coding / system design signal — read the FINAL CODE block above (if present) and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript may show their reasoning). Quote short snippets when calling out specific issues.
-6. Recommended decision hint (hire / no-hire / more rounds) — phrased as guidance for humans, not a command
-7. Optional: timeline table if useful
+3. **Coding summary** — Use **CODING TASK ASSIGNMENT TIMELINE** above. List every distinct exercise that was opened in the shared editor during this session **in order** (or state clearly if the timeline is empty / not supplied). For **each** entry: title, language, and task type when inferable from \`source\` (e.g. \`pre-interview-task\` = take-home submission pre-loaded, \`external-pre-task\` = pasted external PRE-TASK, omitted = typical live assignment). Summarize what was asked (from the description) and **how the candidate tackled it** — reasoning, approach, struggles, and outcomes — grounded in **chat**, **spoken transcript**, and **speech insight snippets**. If multiple tasks were used, compare briefly how performance shifted across them. If the timeline has only one row, still write this section in full.
+4. Strengths observed — base these on the structured transcript summary, chat, and (if present) interviewer session notes. Cite evidence (short verbatim quotes when possible).
+5. Gaps / risks / follow-up questions — same evidence requirement.
+6. **Coding depth (final editor state)** — The **FINAL CODE** block is a snapshot of the **last** active shared coding task only (not every prior exercise). Read it when present and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript may show their reasoning). Quote short snippets when calling out specific issues.
+7. Recommended decision hint (hire / no-hire / more rounds) — phrased as guidance for humans, not a command
+8. Optional: timeline table if useful
 
 LANGUAGE: The transcript / chat may be in Serbian (Cyrillic or Latin), English, or a mix.
 **Write the entire report in English regardless of the source language.** When citing a candidate
@@ -247,10 +283,10 @@ Output **only** Markdown (no JSON wrapper, no code fences around the whole docum
     const client = getAnthropicClient();
     const completion = await createMessageWithFallback(client, {
       system:
-        "You produce interview close-out documentation for internal hiring use only. Output Markdown only. Always write the report in English even if the source materials are in Serbian or another language.",
+        "You produce interview close-out documentation for internal hiring use only. Output Markdown only. Always write the report in English even if the source materials are in Serbian or another language. Use a clear second-level Markdown heading for the coding summary section (e.g. ## Coding summary).",
       messages: [{ role: "user", content: userContent }],
       temperature: 0.35,
-      max_tokens: 6000,
+      max_tokens: 7000,
     });
 
     let markdown =

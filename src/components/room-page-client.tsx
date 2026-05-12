@@ -4,8 +4,12 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { usePartyRoom } from "@/hooks/use-party-room";
 import { useSpeechTranscription } from "@/hooks/use-speech-transcription";
 import type { Participant } from "@/types/room";
-import type { InterviewConfig } from "@/types/interview";
-import type { CodingTaskPreset, PredefinedQuestion } from "@/types/interview";
+import type {
+  CodingTaskAssignmentSnapshot,
+  CodingTaskPreset,
+  InterviewConfig,
+  PredefinedQuestion,
+} from "@/types/interview";
 import { PREDEFINED_QUESTIONS, CODING_TASK_PRESETS } from "@/data/presets";
 import {
   buildCodingTaskGroups,
@@ -152,6 +156,12 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
 
   /** Shared panel editor (interviewer view) — read Yjs text for AI code review. */
   const panelCodingEditorRef = useRef<CollaborativeEditorHandle>(null);
+  /**
+   * Host-only: every distinct coding task opened in the room (deduped by `collaborationTaskId`),
+   * for the final report's "Coding summary" section. Reset when a new interview session starts
+   * from setup.
+   */
+  const codingTaskAssignmentHistoryRef = useRef<CodingTaskAssignmentSnapshot[]>([]);
 
   const {
     connected,
@@ -179,6 +189,38 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     participant?.role === "interviewer" &&
     !!hostParticipantId &&
     hostParticipantId === participant.id;
+
+  /** Host only: record each distinct coding task opened in the room (deduped) for the end-of-interview report. */
+  useEffect(() => {
+    if (!isHost || phase !== "interview") return;
+    const raw = codingTask;
+    if (raw === null || typeof raw !== "object") return;
+    const t = raw as Record<string, unknown>;
+    const title = typeof t.title === "string" ? t.title.trim() : "";
+    if (!title) return;
+    const cid =
+      typeof t.collaborationTaskId === "string" && t.collaborationTaskId.trim().length > 0
+        ? t.collaborationTaskId.trim()
+        : undefined;
+    const desc = typeof t.description === "string" ? t.description : "";
+    const lang = typeof t.language === "string" && t.language.trim() ? t.language : "text";
+    const src = typeof t.source === "string" ? t.source : undefined;
+    const hist = codingTaskAssignmentHistoryRef.current;
+    if (cid) {
+      if (hist.some((h) => h.collaborationTaskId === cid)) return;
+    } else {
+      const sig = `${title}|${desc.slice(0, 240)}`;
+      if (hist.some((h) => !h.collaborationTaskId && `${h.title}|${h.description.slice(0, 240)}` === sig)) return;
+    }
+    hist.push({
+      collaborationTaskId: cid,
+      title,
+      description: desc,
+      language: lang,
+      source: src,
+      recordedAt: Date.now(),
+    });
+  }, [codingTask, phase, isHost]);
 
   /**
    * Derived interview config. `sendConfig` already updates `sharedConfig` synchronously for the host,
@@ -421,6 +463,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   );
 
   const handleSetupComplete = async (config: InterviewConfig) => {
+    codingTaskAssignmentHistoryRef.current = [];
     sendConfig(config);
     sendPhase("interview");
     setStep("interview");
@@ -663,6 +706,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           transcriptAnalyses,
           config: roomConfig,
           codingTask,
+          codingTaskHistory: [...codingTaskAssignmentHistoryRef.current],
           finalCode,
           interviewerSessionNotes: sessionReviewNotes.trim() || undefined,
         }),
@@ -1032,7 +1076,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               taskSource={
                 (codingTask as { source?: string } | null)?.source === "pre-interview-task"
                   ? "pre-interview-task"
-                  : undefined
+                  : (codingTask as { source?: string } | null)?.source === "external-pre-task"
+                    ? "external-pre-task"
+                    : undefined
               }
             />
           </div>
@@ -1654,7 +1700,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             taskSource={
               (codingTask as { source?: string } | null)?.source === "pre-interview-task"
                 ? "pre-interview-task"
-                : undefined
+                : (codingTask as { source?: string } | null)?.source === "external-pre-task"
+                  ? "external-pre-task"
+                  : undefined
             }
           />
         </div>

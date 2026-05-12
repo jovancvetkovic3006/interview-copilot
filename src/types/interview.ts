@@ -52,6 +52,22 @@ export interface PredefinedQuestion {
   strand?: PresetStrand;
 }
 
+/**
+ * One row in the in-room coding assignment timeline (for the end-of-interview report).
+ * Recorded on the host when each new task is broadcast from PartyKit.
+ */
+export interface CodingTaskAssignmentSnapshot {
+  /** Server-issued id when present — stable dedupe key across the session. */
+  collaborationTaskId?: string;
+  title: string;
+  description: string;
+  language: string;
+  /** Room payload `source` when set — e.g. `pre-interview-task`, `external-pre-task`. */
+  source?: string;
+  /** When this client observed the assignment (ms since epoch). */
+  recordedAt: number;
+}
+
 export interface CodingTaskPreset {
   id: string;
   title: string;
