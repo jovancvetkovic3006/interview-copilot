@@ -16,6 +16,13 @@ export interface ChatMessage {
   content: string;
   senderName: string;
   timestamp: number;
+  /**
+   * True when this message arrived from the candidate's voice transcription (debounced final
+   * STT segments flushed into chat) instead of being typed. Lets the UI render a mic icon and
+   * gives the post-interview report context on whether answers were spoken or written. Always
+   * absent on agent replies.
+   */
+  spoken?: boolean;
 }
 
 export interface TranscriptEntry {

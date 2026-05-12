@@ -322,10 +322,40 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const analyzeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const analyzeInFlightRef = useRef(false);
 
+  /**
+   * Voice-to-chat bridge state (candidate role only).
+   *
+   * The Web Speech API hook closes over the `onTranscript` callback once on `startRecording`,
+   * so any state read inside the bridge has to come from a ref to avoid stale-closure bugs.
+   *
+   * - `voiceUtteranceBufRef`: accumulates the candidate's final STT segments since the last flush
+   * - `voiceFlushTimerRef`: 2.5s debounce timer reset on each new segment (silence → flush)
+   * - `voiceFlushInFlightRef`: prevents two parallel agent calls from the bridge
+   * - `agentTypingRef` / `roomConfigLiveRef` / `participantLiveRef`: latest values for the closure
+   */
+  const voiceUtteranceBufRef = useRef("");
+  const voiceFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceFlushInFlightRef = useRef(false);
+  const agentTypingRef = useRef(false);
+  const roomConfigLiveRef = useRef<InterviewConfig | null>(null);
+  const participantLiveRef = useRef<Participant | null>(null);
+
   useEffect(() => {
     transcriptLiveRef.current = transcript;
     messagesLiveRef.current = messages;
   }, [transcript, messages]);
+
+  useEffect(() => {
+    agentTypingRef.current = agentTyping;
+  }, [agentTyping]);
+
+  useEffect(() => {
+    roomConfigLiveRef.current = roomConfig;
+  }, [roomConfig]);
+
+  useEffect(() => {
+    participantLiveRef.current = participant;
+  }, [participant]);
 
   useEffect(() => {
     return () => {
@@ -462,11 +492,118 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     };
   }, [transcript, messages, roomConfig, participants, activeStep, participant, isHost, sendTranscriptAnalysis]);
 
-  const handleTranscriptSegment = useCallback((text: string) => {
-    if (participant) {
-      sendTranscript(text, participant.name);
+  /**
+   * Voice→chat bridge: flush the candidate's accumulated final STT segments into chat as a
+   * single message tagged `spoken: true`, then call `/api/chat` so the AI agent reacts as if
+   * the candidate had typed it. This is what unifies "two AI agents" into one conversation —
+   * the chat agent now sees verbal answers natively, and the transcript analyzer keeps its
+   * narrower role as the private interviewer hint side-channel.
+   *
+   * Re-schedules itself (via `flushRef.current`) if the agent is currently typing so we don't
+   * fire two parallel calls. Reads all live state from refs so the speech hook's stale
+   * `onTranscript` closure stays correct.
+   */
+  const flushRef = useRef<() => void>(() => {});
+  const flushCandidateUtterance = useCallback(() => {
+    const buf = voiceUtteranceBufRef.current.trim();
+    // Skip very short utterances (spurious mic noise, "uh huh", etc.) — keep the chat clean.
+    if (buf.length < 6) {
+      voiceUtteranceBufRef.current = "";
+      return;
     }
-  }, [participant, sendTranscript]);
+    if (voiceFlushInFlightRef.current || agentTypingRef.current) {
+      // Agent is busy — try again shortly. Don't drop the buffer. Ref-indirected so we don't
+      // self-reference the useCallback (lint: react-hooks/immutability).
+      if (voiceFlushTimerRef.current) clearTimeout(voiceFlushTimerRef.current);
+      voiceFlushTimerRef.current = setTimeout(() => flushRef.current(), 1500);
+      return;
+    }
+    const p = participantLiveRef.current;
+    if (!p || p.role !== "candidate") {
+      voiceUtteranceBufRef.current = "";
+      return;
+    }
+    voiceUtteranceBufRef.current = "";
+    voiceFlushInFlightRef.current = true;
+
+    const msg = {
+      id: `msg-${Date.now()}`,
+      role: "user" as const,
+      content: buf,
+      senderName: p.name,
+      timestamp: Date.now(),
+      spoken: true as const,
+    };
+    sendChat(msg);
+
+    setAgentTyping(true);
+    void (async () => {
+      try {
+        const cfg = roomConfigLiveRef.current;
+        const history = messagesLiveRef.current;
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...history, msg].map((m) => ({
+              role: m.role === "agent" ? "agent" : "candidate",
+              content: m.content,
+            })),
+            config: resolveAgentApiConfig(cfg),
+          }),
+        });
+        const text = await res.text();
+        if (text) {
+          const data = JSON.parse(text) as { content?: string };
+          if (data.content) sendAgentResponse(data.content);
+        }
+      } catch (err) {
+        console.error("Voice→chat agent error:", err);
+      } finally {
+        voiceFlushInFlightRef.current = false;
+        setAgentTyping(false);
+      }
+    })();
+  }, [resolveAgentApiConfig, sendAgentResponse, sendChat]);
+  useEffect(() => {
+    flushRef.current = flushCandidateUtterance;
+  }, [flushCandidateUtterance]);
+
+  const handleTranscriptSegment = useCallback(
+    (text: string) => {
+      const p = participantLiveRef.current;
+      if (p) {
+        sendTranscript(text, p.name);
+      }
+      // Only the candidate's voice flows into the chat agent. Interviewer speech stays in the
+      // transcript and feeds the interviewer-only insights side-panel.
+      if (!p || p.role !== "candidate") return;
+      voiceUtteranceBufRef.current = (voiceUtteranceBufRef.current + " " + text).trim();
+      if (voiceFlushTimerRef.current) clearTimeout(voiceFlushTimerRef.current);
+      // Wait ~2.5s of silence before flushing so multi-sentence answers stay together as a
+      // single chat turn instead of triggering the agent on every clause. Ref-indirected so
+      // this callback does not depend on `flushCandidateUtterance` (keeps the speech hook's
+      // captured `onTranscript` aligned with the latest flush logic via `flushRef`).
+      voiceFlushTimerRef.current = setTimeout(() => flushRef.current(), 2500);
+    },
+    [sendTranscript]
+  );
+
+  // Cancel any pending voice flush when leaving the interview phase / unmounting so we don't
+  // post stale spoken messages into the review screen.
+  useEffect(() => {
+    if (phase === "interview") return;
+    if (voiceFlushTimerRef.current) {
+      clearTimeout(voiceFlushTimerRef.current);
+      voiceFlushTimerRef.current = null;
+    }
+    voiceUtteranceBufRef.current = "";
+  }, [phase]);
+  useEffect(() => {
+    return () => {
+      if (voiceFlushTimerRef.current) clearTimeout(voiceFlushTimerRef.current);
+    };
+  }, []);
 
   const {
     isRecording,
@@ -699,17 +836,50 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     });
   }, [sendCodingTask]);
 
-  const handleSendQuestion = useCallback((question: string) => {
-    if (!participant) return;
-    const msg = {
-      id: `msg-${Date.now()}`,
-      role: "user" as const,
-      content: question,
-      senderName: participant.name,
-      timestamp: Date.now(),
-    };
-    sendChat(msg);
-  }, [participant, sendChat]);
+  /**
+   * Posting a curated question into chat AND firing the agent in one go. Without the agent
+   * call the question would land in chat as silent text — the agent would never react and the
+   * candidate's next reply (typed or voice) would be evaluated against an empty context.
+   * Mirrors `handleSendMessage`, but is text-driven (sidebar click / CV-suggestion accept).
+   */
+  const handleSendQuestion = useCallback(
+    async (question: string) => {
+      if (!participant) return;
+      const msg = {
+        id: `msg-${Date.now()}`,
+        role: "user" as const,
+        content: question,
+        senderName: participant.name,
+        timestamp: Date.now(),
+      };
+      sendChat(msg);
+
+      setAgentTyping(true);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...messagesLiveRef.current, msg].map((m) => ({
+              role: m.role === "agent" ? "agent" : "candidate",
+              content: m.content,
+            })),
+            config: resolveAgentApiConfig(roomConfigLiveRef.current),
+          }),
+        });
+        const text = await res.text();
+        if (text) {
+          const data = JSON.parse(text) as { content?: string };
+          if (data.content) sendAgentResponse(data.content);
+        }
+      } catch (err) {
+        console.error("Send-question agent error:", err);
+      } finally {
+        setAgentTyping(false);
+      }
+    },
+    [participant, sendChat, sendAgentResponse, resolveAgentApiConfig]
+  );
 
   const runReportGeneration = useCallback(async () => {
     if (
@@ -739,6 +909,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             role: m.role,
             content: m.content,
             timestamp: m.timestamp,
+            ...(m.spoken ? { spoken: true } : {}),
           })),
           transcript,
           transcriptAnalyses,
@@ -1075,7 +1246,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       key={msg.id}
                       className={`flex flex-col ${msg.role === "agent" ? "items-start" : "items-end"}`}
                     >
-                      <div className="text-xs text-zinc-500 mb-0.5">{msg.senderName}</div>
+                      <div className="text-xs text-zinc-500 mb-0.5 flex items-center gap-1">
+                        {msg.spoken && (
+                          <Mic
+                            className="h-3 w-3 text-blue-400"
+                            aria-label="Spoken (transcribed from microphone)"
+                          />
+                        )}
+                        <span>{msg.senderName}</span>
+                      </div>
                       <div
                         className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                           msg.role === "agent"
@@ -1512,7 +1691,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                     key={msg.id}
                     className={`flex flex-col ${msg.role === "agent" ? "items-start" : "items-end"}`}
                   >
-                    <div className="text-xs text-zinc-500 mb-0.5">{msg.senderName}</div>
+                    <div className="text-xs text-zinc-500 mb-0.5 flex items-center gap-1">
+                      {msg.spoken && (
+                        <Mic
+                          className="h-3 w-3 text-blue-400"
+                          aria-label="Spoken (transcribed from microphone)"
+                        />
+                      )}
+                      <span>{msg.senderName}</span>
+                    </div>
                     <div
                       className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                         msg.role === "agent"

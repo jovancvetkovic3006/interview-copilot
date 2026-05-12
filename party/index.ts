@@ -48,6 +48,12 @@ export interface ChatMessage {
   content: string;
   senderName: string;
   timestamp: number;
+  /**
+   * Set by the candidate client when a chat message was produced by flushing a debounced final
+   * STT segment (voice-to-chat bridge) instead of being typed. The server is just a passthrough —
+   * it doesn't need to validate this; the field rides along on the existing chat broadcast.
+   */
+  spoken?: boolean;
 }
 
 interface InterviewReport {
