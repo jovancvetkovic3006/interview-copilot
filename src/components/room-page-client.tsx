@@ -49,6 +49,7 @@ import {
   Sparkles,
   StopCircle,
   FileSearch,
+  Pin,
 } from "lucide-react";
 
 const TRANSCRIPT_ANALYSIS_DEBOUNCE_MS = 4000;
@@ -823,6 +824,77 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       return tokens.every((token) => hay.includes(token));
     });
   }, [externalPreTasks, panelTasksQuery]);
+
+  /**
+   * Items the host curated during setup. The agent already receives these via
+   * `resolveAgentApiConfig` (selectedQuestions / selectedCodingTasks → /api/chat system prompt),
+   * so the AI is nudged to weave them in. The sidebar additionally pins them at the top so the
+   * interviewer can fire them off with one click without scrolling/searching the role library
+   * mid-interview.
+   *
+   * `selectedLibraryTasks` excludes external PRE-TASKs — those have their own (violet) group
+   * that already sits above the library.
+   */
+  const selectedQuestionsList = useMemo<PredefinedQuestion[]>(
+    () => roomConfig?.selectedQuestions || [],
+    [roomConfig?.selectedQuestions]
+  );
+  const selectedLibraryTasks = useMemo<CodingTaskPreset[]>(
+    () => (roomConfig?.selectedCodingTasks || []).filter((t) => !t.preTask),
+    [roomConfig?.selectedCodingTasks]
+  );
+
+  const visibleSelectedQuestions = useMemo(() => {
+    if (!panelQuestionsQuery.trim()) return selectedQuestionsList;
+    const tokens = panelQuestionsQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    return selectedQuestionsList.filter((q) => {
+      const hay = questionSearchableText(q).toLowerCase();
+      return tokens.every((token) => hay.includes(token));
+    });
+  }, [selectedQuestionsList, panelQuestionsQuery]);
+
+  const visibleSelectedLibraryTasks = useMemo(() => {
+    if (!panelTasksQuery.trim()) return selectedLibraryTasks;
+    const tokens = panelTasksQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    return selectedLibraryTasks.filter((t) => {
+      const hay = taskSearchableText(t).toLowerCase();
+      return tokens.every((token) => hay.includes(token));
+    });
+  }, [selectedLibraryTasks, panelTasksQuery]);
+
+  /**
+   * Library groups with already-pinned items removed, so a selection isn't shown twice (once
+   * in the pinned group and again in its role/strand group below).
+   */
+  const selectedQuestionIds = useMemo(
+    () => new Set(selectedQuestionsList.map((q) => q.id)),
+    [selectedQuestionsList]
+  );
+  const dedupedQuestionGroups = useMemo(
+    () =>
+      visiblePanelQuestionGroups
+        .map((g) => ({
+          heading: g.heading,
+          items: g.items.filter((item) => !selectedQuestionIds.has(item.id)),
+        }))
+        .filter((g) => g.items.length > 0),
+    [visiblePanelQuestionGroups, selectedQuestionIds]
+  );
+
+  const selectedTaskIds = useMemo(
+    () => new Set(selectedLibraryTasks.map((t) => t.id)),
+    [selectedLibraryTasks]
+  );
+  const dedupedTaskGroups = useMemo(
+    () =>
+      visiblePanelTaskGroups
+        .map((g) => ({
+          heading: g.heading,
+          items: g.items.filter((item) => !selectedTaskIds.has(item.id)),
+        }))
+        .filter((g) => g.items.length > 0),
+    [visiblePanelTaskGroups, selectedTaskIds]
+  );
 
   const handleAssignTask = useCallback((task: CodingTaskPreset) => {
     sendCodingTask({
@@ -1749,6 +1821,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 {expandedSection === "questions" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <MessageSquare className="h-3.5 w-3.5 text-blue-500" />
                 Questions ({availableQuestions.length})
+                {selectedQuestionsList.length > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 text-[9px] py-0 px-1.5 font-normal bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-900/60"
+                  >
+                    <Pin className="h-2.5 w-2.5 mr-0.5" />
+                    {selectedQuestionsList.length} pinned
+                  </Badge>
+                )}
               </button>
               {expandedSection === "questions" && (
                 <div className="px-3 pb-3 space-y-3">
@@ -1782,30 +1863,67 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       {visiblePanelQuestionCount === 0 && panelQuestionsQuery ? (
                         <p className="text-xs text-zinc-400 px-1">No questions match.</p>
                       ) : (
-                        visiblePanelQuestionGroups.map((group) => (
-                          <div key={group.heading} className="space-y-1.5">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
-                            {group.items.map((q) => (
-                              <div key={q.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-blue-300 dark:hover:border-blue-800 transition-colors">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <Badge variant="secondary" className="text-[10px] mb-1">{q.category}</Badge>
-                                    <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{q.question}</p>
+                        <>
+                          {/* Pinned at setup — questions the host curated. The agent already
+                              receives them via the system prompt; the panel surfaces them so
+                              the host can fire any of them at the candidate with one click. */}
+                          {visibleSelectedQuestions.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 px-0.5 flex items-center gap-1">
+                                <Pin className="h-3 w-3" />
+                                Pinned at setup
+                              </p>
+                              {visibleSelectedQuestions.map((q) => (
+                                <div
+                                  key={`pinned-q-${q.id}`}
+                                  className="group rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-2.5 hover:border-amber-400 dark:hover:border-amber-700 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <Badge variant="secondary" className="text-[10px] mb-1 bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200 border-amber-200 dark:border-amber-900/50">
+                                        {q.category}
+                                      </Badge>
+                                      <p className="text-xs text-zinc-800 dark:text-zinc-200 leading-relaxed">{q.question}</p>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="shrink-0 h-7 w-7 p-0 text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60"
+                                      onClick={() => handleSendQuestion(q.question)}
+                                      title="Send this question to chat (the agent will react)"
+                                    >
+                                      <Send className="h-3 w-3" />
+                                    </Button>
                                   </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
-                                    onClick={() => handleSendQuestion(q.question)}
-                                    title="Send this question to chat"
-                                  >
-                                    <Send className="h-3 w-3" />
-                                  </Button>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))
+                              ))}
+                            </div>
+                          )}
+                          {dedupedQuestionGroups.map((group) => (
+                            <div key={group.heading} className="space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
+                              {group.items.map((q) => (
+                                <div key={q.id} className="group rounded-lg border border-zinc-200 dark:border-zinc-800 p-2.5 hover:border-blue-300 dark:hover:border-blue-800 transition-colors">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <Badge variant="secondary" className="text-[10px] mb-1">{q.category}</Badge>
+                                      <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">{q.question}</p>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
+                                      onClick={() => handleSendQuestion(q.question)}
+                                      title="Send this question to chat"
+                                    >
+                                      <Send className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </>
                       )}
                     </>
                   )}
@@ -1821,6 +1939,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 {expandedSection === "tasks" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <Code2 className="h-3.5 w-3.5 text-green-500" />
                 Coding Tasks ({externalPreTasks.length + availableTasks.length})
+                {selectedLibraryTasks.length > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 text-[9px] py-0 px-1.5 font-normal bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-900/60"
+                  >
+                    <Pin className="h-2.5 w-2.5 mr-0.5" />
+                    {selectedLibraryTasks.length} pinned
+                  </Badge>
+                )}
               </button>
               {expandedSection === "tasks" && (
                 <div className="px-3 pb-3 space-y-3">
@@ -1851,8 +1978,54 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                           {visibleExternalPreTasks.length + visiblePanelTaskCount} of {externalPreTasks.length + availableTasks.length} match
                         </p>
                       )}
-                      {/* PRE-TASKs group — shown first when present so the interviewer can open the
-                          candidate's external solution for discussion right away. */}
+                      {/* Pinned at setup — coding tasks the host curated. The agent already
+                          knows about these via the system prompt; surfacing them at the top
+                          lets the interviewer assign them with one click instead of scrolling
+                          through the role library mid-interview. Always-on Assign button so
+                          the action is one tap away (no hover needed). */}
+                      {visibleSelectedLibraryTasks.length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 px-0.5 flex items-center gap-1">
+                            <Pin className="h-3 w-3" />
+                            Pinned at setup
+                          </p>
+                          {visibleSelectedLibraryTasks.map((task) => (
+                            <div
+                              key={`pinned-t-${task.id}`}
+                              className="group rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-2.5 hover:border-amber-400 dark:hover:border-amber-700 transition-colors"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                    <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">{task.title}</span>
+                                    <Badge variant="secondary" className="text-[10px]">{task.language}</Badge>
+                                    {task.difficulty && (
+                                      <Badge variant="secondary" className="text-[10px] capitalize">{task.difficulty}</Badge>
+                                    )}
+                                    {task.staticReview && (
+                                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-200">
+                                        Static
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-zinc-500 whitespace-pre-line max-h-40 overflow-y-auto pr-0.5">{task.description}</p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="shrink-0 h-7 px-2 text-[10px] text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60"
+                                  onClick={() => handleAssignTask(task)}
+                                  title="Assign this task to the shared editor"
+                                >
+                                  Assign
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* PRE-TASKs group — shown after pinned selections so the host can still
+                          open a candidate's external solution for discussion when relevant. */}
                       {visibleExternalPreTasks.length > 0 && (
                         <div className="space-y-1.5">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400 px-0.5">
@@ -1896,7 +2069,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       {visibleExternalPreTasks.length === 0 && visiblePanelTaskCount === 0 && panelTasksQuery ? (
                         <p className="text-xs text-zinc-400 px-1">No coding tasks match.</p>
                       ) : (
-                        visiblePanelTaskGroups.map((group) => (
+                        dedupedTaskGroups.map((group) => (
                           <div key={group.heading} className="space-y-1.5">
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 px-0.5">{group.heading}</p>
                             {group.items.map((task) => (
