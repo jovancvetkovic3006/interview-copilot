@@ -2136,6 +2136,18 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       starterCode: task.starterCode,
                     })
                   }
+                  onUploadFile={(file) => {
+                    // Mid-interview CV/bio upload — append to the shared config and broadcast so
+                    // every host's panel re-fetches tailored suggestions and the chat agent picks
+                    // the new document up on its next /api/chat turn (which always reads from the
+                    // latest roomConfig.uploadedFiles via resolveAgentApiConfig).
+                    if (!roomConfig) return;
+                    const updated: InterviewConfig = {
+                      ...roomConfig,
+                      uploadedFiles: [...(roomConfig.uploadedFiles ?? []), file],
+                    };
+                    sendConfig(updated);
+                  }}
                 />
               )}
             </div>
