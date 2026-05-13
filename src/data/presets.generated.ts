@@ -1862,6 +1862,22 @@ export const CODING_TASK_PRESETS: Record<string, CodingTaskPreset[]> = {
       "difficulty": "mid"
     },
     {
+      "id": "ct-gen-20",
+      "title": "Find Intersection of Two Sorted Lists",
+      "description": "What it is: A classic two-pointer / set problem. Input is an array strArr with exactly two elements: each element is a comma-separated list of numbers already sorted in ascending order (as a string). Output is a single comma-separated string containing the numbers that appear in both lists, in ascending order. If there is no intersection, return the literal string \"false\".\n\nGoal: Practice parsing input, walking two sorted sequences in parallel, and joining the result back into the same string format. Naive O(n*m) nested-loop is fine to discuss first, then improve to O(n + m) with two pointers (since both inputs are already sorted).\n\nWhat to do: Implement findIntersection(strArr). Split each element on \", \" (handle stray whitespace), convert to numbers, find common values, then join with \", \". Examples: strArr = [\"1, 3, 4, 7, 13\", \"1, 2, 4, 13, 15\"] → \"1, 4, 13\". strArr = [\"1, 2, 3\", \"4, 5, 6\"] → \"false\".\n\nFinish when: Two-pointer version handles duplicates sanely (no double-emit), the empty- intersection case returns the string \"false\" (not the boolean), and the output uses the same \", \" separator as the input.",
+      "starterCode": "function findIntersection(strArr) {\n  // strArr has exactly 2 elements, each a comma-separated, ascending-sorted list of numbers.\n  // Return the intersection as a comma-separated string, or the string \"false\" if empty.\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
+      "id": "ct-gen-21",
+      "title": "Next Palindrome Number",
+      "description": "What it is: Given a positive integer num, return the next strictly larger integer that is a palindrome (reads the same forward and backward). Examples: 24 → 33, 8 → 9, 9 → 11, 99 → 101, 808 → 818, 999 → 1001.\n\nGoal: Start with the obvious brute force (n = num + 1; while n is not a palindrome, n++) to get something working, then discuss an O(number-of-digits) approach that mirrors the left half onto the right half and handles the \"carry / rollover\" case (e.g. 999 → 1001).\n\nWhat to do: Implement nextPalindrome(num). isPalindrome can be a string-reverse compare or a two-pointer scan. Decide explicitly what \"next\" means when num itself is already a palindrome — should you skip it? (Yes, the prompt says \"next largest\", so 11 → 22, not 11.)\n\nFinish when: Brute force passes the examples above; you can sketch (or implement) the mirror-and-carry version for big inputs (e.g. 1234567); single-digit and all-9s edges are handled.",
+      "starterCode": "function nextPalindrome(num) {\n  // Return the next integer strictly greater than num that reads the same forward and backward.\n}",
+      "language": "javascript",
+      "difficulty": "mid"
+    },
+    {
       "id": "ct-gen-s1",
       "title": "Static review: null and shape",
       "description": "What it is: Code review only—do not rely on running it.\n\nGoal: Spot crashes and bad assumptions when user or profile data is missing or the wrong shape.\n\nWhat to do: List every failure (null name, missing email, non-string). Propose guards, optional chaining, or validation/schema.\n\nFinish when: You’ve named concrete bugs and sketched a safer implementation or types in the editor.",
