@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, ArrowRight, ClipboardList } from "lucide-react";
+import { Users, ArrowRight, ClipboardList, ListChecks } from "lucide-react";
 
 function generateRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -84,6 +84,21 @@ export default function InterviewLobbyPage() {
               Not the candidate? Open the link your host sent you.
             </p>
           </form>
+
+          <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+            <Link
+              href="/quiz/new"
+              className="flex items-start gap-2 rounded-lg p-2 -mx-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+            >
+              <ListChecks className="h-4 w-4 text-indigo-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Send a quiz</p>
+                <p className="text-xs text-zinc-500">
+                  Multiple-choice assessment with shareable link (BE Senior, FE Senior, etc.).
+                </p>
+              </div>
+            </Link>
+          </div>
 
           <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
             <Link

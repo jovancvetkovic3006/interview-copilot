@@ -11,7 +11,9 @@ import type {
   TranscriptEntry,
   TranscriptAnalysisEntry,
   InterviewReport,
+  QuestionScoreEntry,
 } from "@/types/room";
+import type { QuizAnswerEntry } from "@/types/quiz";
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999";
 
@@ -27,6 +29,9 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const [phase, setPhase] = useState<RoomState["phase"]>("setup");
   const [config, setConfig] = useState<unknown | null>(null);
   const [codingTask, setCodingTask] = useState<unknown | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<unknown | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswerEntry[]>([]);
+  const [questionScores, setQuestionScores] = useState<QuestionScoreEntry[]>([]);
   const [interviewReport, setInterviewReport] = useState<InterviewReport | null>(null);
   const [interviewStartedAt, setInterviewStartedAt] = useState<number | null>(null);
   const [timeExtensionMinutes, setTimeExtensionMinutes] = useState(0);
@@ -68,6 +73,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           setMessages((prev) => [...prev, data.message]);
           break;
         case "agent-response":
+          if (participantRoleRef.current === "candidate") break;
           setMessages((prev) => [
             ...prev,
             {
@@ -103,6 +109,19 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           break;
         case "coding-task":
           setCodingTask(data.task);
+          setActiveQuiz(null);
+          break;
+        case "quiz-start":
+          setActiveQuiz(data.quiz);
+          setCodingTask(null);
+          setQuizAnswers([]);
+          break;
+        case "quiz-answer":
+          setQuizAnswers((prev) => [...prev, data.answer as QuizAnswerEntry]);
+          break;
+        case "question-score":
+          if (participantRoleRef.current !== "interviewer") break;
+          setQuestionScores((prev) => [...prev, data.entry]);
           break;
         case "transcript": {
           const preview =
@@ -142,11 +161,15 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             host: data.state.hostParticipantId,
           });
           setParticipants(data.state.participants);
-          setMessages(data.state.messages);
+          setMessages(data.state.messages.filter((m) =>
+            participantRoleRef.current === "candidate" ? m.role !== "agent" : true
+          ));
           setTranscript(data.state.transcript);
           setPhase(data.state.phase);
           setConfig(data.state.config);
           setCodingTask(data.state.codingTask);
+          setActiveQuiz(data.state.activeQuiz ?? null);
+          setQuizAnswers((data.state.quizAnswers ?? []) as QuizAnswerEntry[]);
           setHostParticipantId(data.state.hostParticipantId);
           setInterviewStartedAt(
             typeof data.state.interviewStartedAt === "number" ? data.state.interviewStartedAt : null
@@ -158,6 +181,11 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             participantRoleRef.current !== "interviewer"
               ? []
               : (data.state.transcriptAnalyses ?? [])
+          );
+          setQuestionScores(
+            participantRoleRef.current !== "interviewer"
+              ? []
+              : (data.state.questionScores ?? [])
           );
           setInterviewReport(
             participantRoleRef.current !== "interviewer"
@@ -206,8 +234,25 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
 
   const sendCodingTask = useCallback((task: unknown) => {
     if (!socketRef.current) return;
-    // State updates from the server's broadcast only so `collaborationTaskId` matches all clients.
     socketRef.current.send(JSON.stringify({ type: "coding-task", task } satisfies RoomMessage));
+  }, []);
+
+  const sendQuizStart = useCallback((quiz: unknown) => {
+    if (!socketRef.current) return;
+    socketRef.current.send(JSON.stringify({ type: "quiz-start", quiz } satisfies RoomMessage));
+  }, []);
+
+  const sendQuizAnswer = useCallback((answer: QuizAnswerEntry) => {
+    if (!socketRef.current) return;
+    setQuizAnswers((prev) => [...prev, answer]);
+    socketRef.current.send(JSON.stringify({ type: "quiz-answer", answer } satisfies RoomMessage));
+  }, []);
+
+  const sendQuestionScore = useCallback((entry: QuestionScoreEntry) => {
+    if (!socketRef.current) return;
+    if (participantRoleRef.current !== "interviewer") return;
+    setQuestionScores((prev) => [...prev, entry]);
+    socketRef.current.send(JSON.stringify({ type: "question-score", entry } satisfies RoomMessage));
   }, []);
 
   const sendTimeExtension = useCallback((addMinutes: 30 | 60) => {
@@ -259,6 +304,9 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     phase,
     config,
     codingTask,
+    activeQuiz,
+    quizAnswers,
+    questionScores,
     interviewReport,
     interviewStartedAt,
     timeExtensionMinutes,
@@ -268,6 +316,9 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     sendConfig,
     sendPhase,
     sendCodingTask,
+    sendQuizStart,
+    sendQuizAnswer,
+    sendQuestionScore,
     sendTimeExtension,
     sendTranscript,
     sendTranscriptAnalysis,

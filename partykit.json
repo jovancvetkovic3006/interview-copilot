@@ -3,7 +3,8 @@
   "main": "party/index.ts",
   "parties": {
     "yjs": "party/yjs.ts",
-    "pretask": "party/pretask.ts"
+    "pretask": "party/pretask.ts",
+    "quiz": "party/quiz.ts"
   },
   "compatibilityDate": "2024-01-01"
 }

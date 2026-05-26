@@ -71,6 +71,9 @@ export async function POST(req: NextRequest) {
       transcriptSummary: clientProvidedSummary,
       interviewerSessionNotes,
       codingTaskHistory,
+      questionScores,
+      quizAnswers,
+      activeQuiz,
     } = body as {
       roomCode?: string;
       participants?: { name: string; role: string }[];
@@ -96,6 +99,9 @@ export async function POST(req: NextRequest) {
        * dedicated "Coding summary" section in the report.
        */
       codingTaskHistory?: unknown[];
+      questionScores?: { question: string; category?: string; score: number; notes?: string }[];
+      quizAnswers?: { questionId: string; selectedIndex: number }[];
+      activeQuiz?: { title?: string; questions?: { id: string; question: string; correctIndex: number }[] };
     };
 
     const chatBlock = (messages ?? [])
@@ -231,6 +237,25 @@ ${truncate(transcriptTailBlock, 60_000)}`;
       spokenSection = truncate(transcriptTailBlock, 60_000);
     }
 
+    const questionScoreBlock = (questionScores ?? [])
+      .map((s) => `- [${s.category || "general"}] ${s.score}/5 — ${s.question}${s.notes ? ` (note: ${s.notes})` : ""}`)
+      .join("\n");
+
+    let quizBlock = "(none)";
+    const quiz = activeQuiz as { title?: string; questions?: { id: string; question: string; correctIndex: number }[] } | undefined;
+    if (quiz?.questions?.length && Array.isArray(quizAnswers) && quizAnswers.length > 0) {
+      const lines = quizAnswers.map((a) => {
+        const q = quiz.questions!.find((qq) => qq.id === a.questionId);
+        const correct = q && a.selectedIndex === q.correctIndex;
+        return `- ${q?.question ?? a.questionId}: selected option ${a.selectedIndex + 1} (${correct ? "correct" : "incorrect"})`;
+      });
+      const correctCount = quizAnswers.filter((a) => {
+        const q = quiz.questions!.find((qq) => qq.id === a.questionId);
+        return q && a.selectedIndex === q.correctIndex;
+      }).length;
+      quizBlock = `Quiz: ${quiz.title ?? "Live quiz"}\nScore: ${correctCount}/${quiz.questions.length}\n${lines.join("\n")}`;
+    }
+
     const userContent = `You are writing the official post-interview packet for the hiring panel.
 
 Room code: ${roomCode || "(unknown)"}
@@ -262,6 +287,12 @@ ${spokenSection}
 SPEECH INSIGHT SNIPPETS (interviewer-only per-answer analyses captured live during the session):
 ${analysisBlock || "(none)"}
 
+MANUAL QUESTION SCORES (interviewer-rated 1–5 after asking curated questions — primary signal when no transcript):
+${questionScoreBlock || "(none)"}
+
+LIVE QUIZ RESULTS (if a quiz was assigned during the session):
+${quizBlock}
+
 EVIDENCE POLICY:
 - The **spoken transcript** and the **interviewer session notes** are **complementary**. When both are present, use **both** — they do not cancel each other out and you must not pick one and ignore the other. The transcript captures what was literally said (with possible STT noise); the notes capture the host's interpretation, off-mic discussion, body language cues, and judgement that the recording cannot show. Cross-reference them.
 - When only **one** of the two is present, lean on that one and say so once in the executive summary (e.g. "Based on interviewer notes only — no live recording was captured." or "Based on the spoken transcript — no additional interviewer notes were provided.").
@@ -271,6 +302,7 @@ Write a structured **Markdown** report suitable for PDF export. Include:
 1. Title with role/difficulty and candidate name if inferable
 2. Executive summary (5–8 bullets) — note here which evidence sources were available (transcript / notes / both) so the reader knows what the report is grounded in.
 3. **Coding summary** — Use **CODING TASK ASSIGNMENT TIMELINE** above. List every distinct exercise that was opened in the shared editor during this session **in order** (or state clearly if the timeline is empty / not supplied). For **each** entry: title, language, and task type when inferable from \`source\` (e.g. \`pre-interview-task\` = take-home submission pre-loaded, \`external-pre-task\` = pasted external PRE-TASK, omitted = typical live assignment). Summarize what was asked (from the description) and **how the candidate tackled it** — reasoning, approach, struggles, and outcomes — grounded in **chat**, **spoken transcript**, **interviewer session notes**, and **speech insight snippets**. If multiple tasks were used, compare briefly how performance shifted across them. If the timeline has only one row, still write this section in full.
+3b. **Quiz summary** — If LIVE QUIZ RESULTS are present, summarize performance and notable misses.
 4. **Strengths observed** — base these on **all** available evidence: the structured transcript summary, chat, **and the interviewer session notes**. When both transcript and notes are present, cite at least one observation grounded in the notes and at least one grounded in the transcript whenever possible. Use short verbatim quotes when supported.
 5. **Gaps / risks / follow-up questions** — same evidence requirement as Strengths. Notes often surface concerns the transcript will not show (off-mic confusion, hesitation, attitude); do not omit them.
 6. **Coding depth (final editor state)** — The **FINAL CODE** block is a snapshot of the **last** active shared coding task only (not every prior exercise). Read it when present and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript/notes may show their reasoning). Quote short snippets when calling out specific issues.

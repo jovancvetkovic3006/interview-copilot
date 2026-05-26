@@ -298,16 +298,23 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
       });
 
       const data = await res.json();
-      if (data.error) {
-        alert(data.error);
+      if (!res.ok || data.error) {
+        alert(data.error || `Upload failed (${res.status})`);
       } else {
-        const newFile: UploadedFile = {
-          id: generateId(),
-          name: data.fileName || file.name,
-          type: uploadFileType,
-          text: data.text,
-        };
-        setUploadedFiles([...uploadedFiles, newFile]);
+        const text = typeof data.text === "string" ? data.text.trim() : "";
+        if (text.length < 50) {
+          alert(
+            "Parsed file is too short to be useful (need ~50+ chars). For PDFs, use a text-based file or try .txt/.md."
+          );
+        } else {
+          const newFile: UploadedFile = {
+            id: generateId(),
+            name: data.fileName || file.name,
+            type: uploadFileType,
+            text,
+          };
+          setUploadedFiles([...uploadedFiles, newFile]);
+        }
       }
     } catch {
       alert("Failed to upload file. Please try again.");

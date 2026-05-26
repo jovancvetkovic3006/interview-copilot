@@ -14,32 +14,42 @@ interface UseSpeechTranscriptionOptions {
   language?: string;
 }
 
+/** If no STT activity for this long while recording, recreate the recognition instance. */
+const WATCHDOG_IDLE_MS = 45_000;
+/** Proactively rotate the recognition session before Chromium's ~60s continuous limit. */
+const PROACTIVE_ROTATION_MS = 50_000;
+
 export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = {}) {
-  // Default to Serbian (sr-RS) — most live interviews here are in Serbian. Override via prop for
-  // English / other-language sessions; downstream AI prompts produce English regardless.
   const { onTranscript, language = "sr-RS" } = options;
   const [isRecording, setIsRecording] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
-  /** Shown when the browser STT hits a recoverable error (e.g. cloud `network`). */
   const [speechNotice, setSpeechNotice] = useState<string | null>(null);
   const [interimText, setInterimText] = useState("");
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  /** Must be read from onerror/onend — `isRecording` state in those closures is often stale. */
   const recordingActiveRef = useRef(false);
-  /** Throttle interim `setState` so rapid STT updates do not thrash React layout. */
   const interimPendingRef = useRef("");
   const interimFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Avoid spamming devtools when Chromium fires many `network` / `aborted` STT events. */
   const lastRecoverableSpeechLogRef = useRef(0);
-  /** Suppress `onend` → immediate `start()` while we recover from `network` (avoids retry storms). */
   const skipOnEndRestartUntilRef = useRef(0);
   const networkRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Delay before next `start()` after `network` / `aborted`; reset on successful `onstart`. */
   const networkBackoffMsRef = useRef(2000);
   const lastOnEndTraceRef = useRef(0);
-  /** Total `network`/`aborted` this record session (reset on start/stop) — for rare “many failures” hint only. */
   const sessionNetworkErrorsRef = useRef(0);
+  const lastActivityRef = useRef(0);
+  const sessionStartedAtRef = useRef(0);
+  const watchdogTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onTranscriptRef = useRef(onTranscript);
+  const languageRef = useRef(language);
+  const recreateRecognitionRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
+
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   const clearNetworkRetryTimer = useCallback(() => {
     if (networkRetryTimerRef.current != null) {
@@ -52,6 +62,13 @@ export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = 
     if (interimFlushTimerRef.current != null) {
       clearTimeout(interimFlushTimerRef.current);
       interimFlushTimerRef.current = null;
+    }
+  }, []);
+
+  const clearWatchdog = useCallback(() => {
+    if (watchdogTimerRef.current != null) {
+      clearInterval(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
     }
   }, []);
 
@@ -70,18 +87,234 @@ export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = 
     }, 120);
   }, []);
 
+  const teardownRecognition = useCallback(() => {
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    rec.onstart = null;
+    rec.onresult = null;
+    rec.onerror = null;
+    rec.onend = null;
+    try {
+      rec.stop();
+    } catch {
+      /* ignore */
+    }
+    recognitionRef.current = null;
+  }, []);
+
+  const markActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+  }, []);
+
+  const attachRecognition = useCallback(
+    (recognition: SpeechRecognition, isFreshSession: boolean) => {
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = languageRef.current;
+
+      recognition.onstart = () => {
+        networkBackoffMsRef.current = 2000;
+        skipOnEndRestartUntilRef.current = 0;
+        markActivity();
+        if (isFreshSession) sessionStartedAtRef.current = Date.now();
+        transcriptionTrace("recognition.onstart — listening");
+        setSpeechNotice(null);
+      };
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        markActivity();
+        setSpeechNotice(null);
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            const finalText = result[0].transcript.trim();
+            if (finalText) {
+              const segment: TranscriptSegment = {
+                text: finalText,
+                timestamp: Date.now(),
+                isFinal: true,
+              };
+              setSegments((prev) => [...prev, segment]);
+              transcriptionTrace("recognition final segment", {
+                resultIndex: event.resultIndex,
+                sliceIndex: i,
+                chars: finalText.length,
+                text: finalText.length > 200 ? `${finalText.slice(0, 200)}…` : finalText,
+              });
+              onTranscriptRef.current?.(finalText);
+            }
+            interimPendingRef.current = "";
+            clearInterimFlushTimer();
+            setInterimText("");
+          } else {
+            interim += result[0].transcript;
+          }
+        }
+        if (interim) {
+          markActivity();
+          interimPendingRef.current = interim;
+          scheduleInterimFlush();
+        }
+      };
+
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        if (event.error === "no-speech") return;
+
+        if (event.error === "aborted") {
+          if (recordingActiveRef.current) {
+            queueMicrotask(() => {
+              if (!recognitionRef.current || !recordingActiveRef.current) return;
+              try {
+                recognitionRef.current.start();
+              } catch {
+                recreateRecognitionRef.current();
+              }
+            });
+          }
+          return;
+        }
+
+        if (event.error === "network") {
+          sessionNetworkErrorsRef.current += 1;
+          const n = sessionNetworkErrorsRef.current;
+          if (recordingActiveRef.current && n >= 10) {
+            setSpeechNotice(
+              "Speech has had many connection errors this session. Try desktop Chrome/Edge (not an embedded browser), turn off VPN or strict ad-block, or Stop and try again later."
+            );
+          }
+          const now = Date.now();
+          if (now - lastRecoverableSpeechLogRef.current > 10_000) {
+            lastRecoverableSpeechLogRef.current = now;
+            transcriptionTrace("recognition recoverable (retry scheduled)", {
+              error: event.error,
+              message: event.message || undefined,
+              active: recordingActiveRef.current,
+              nextDelayMs: networkBackoffMsRef.current,
+            });
+          }
+
+          const delay = networkBackoffMsRef.current;
+          networkBackoffMsRef.current = Math.min(15_000, Math.floor(delay * 1.5));
+          skipOnEndRestartUntilRef.current = now + delay + 500;
+          clearNetworkRetryTimer();
+          networkRetryTimerRef.current = setTimeout(() => {
+            networkRetryTimerRef.current = null;
+            skipOnEndRestartUntilRef.current = 0;
+            if (recognitionRef.current && recordingActiveRef.current) {
+              try {
+                recognitionRef.current.start();
+                markActivity();
+              } catch {
+                recreateRecognitionRef.current();
+              }
+            }
+          }, delay);
+          return;
+        }
+
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          recordingActiveRef.current = false;
+          teardownRecognition();
+          clearWatchdog();
+          setIsRecording(false);
+          transcriptionTraceWarn("recognition stopped: mic blocked", event.error);
+          setSpeechNotice(
+            "Speech was blocked (microphone). Allow the microphone for this site, then tap Record again."
+          );
+          return;
+        }
+
+        transcriptionTraceWarn("recognition.onerror (unexpected)", {
+          error: event.error,
+          message: event.message || undefined,
+          active: recordingActiveRef.current,
+        });
+        console.error("[transcription] Speech recognition error:", event.error);
+      };
+
+      recognition.onend = () => {
+        const willRestart = Boolean(recognitionRef.current && recordingActiveRef.current);
+        const now = Date.now();
+        if (now - lastOnEndTraceRef.current > 8000) {
+          lastOnEndTraceRef.current = now;
+          transcriptionTrace("recognition.onend", { willRestart });
+        }
+        if (!recognitionRef.current || !recordingActiveRef.current) return;
+        if (now < skipOnEndRestartUntilRef.current) return;
+
+        // Proactive rotation before Chromium's session cap instead of a fragile restart loop.
+        if (now - sessionStartedAtRef.current >= PROACTIVE_ROTATION_MS) {
+          transcriptionTrace("recognition proactive rotation after session age");
+          recreateRecognitionRef.current();
+          return;
+        }
+
+        try {
+          recognitionRef.current.start();
+          markActivity();
+          transcriptionTrace("recognition restarted after onend");
+        } catch {
+          transcriptionTraceWarn("recognition restart after onend failed — recreating");
+          recreateRecognitionRef.current();
+        }
+      };
+    },
+    [clearInterimFlushTimer, clearNetworkRetryTimer, clearWatchdog, markActivity, scheduleInterimFlush, teardownRecognition]
+  );
+
+  const startRecognitionInstance = useCallback(
+    (isFreshSession: boolean) => {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return false;
+
+      teardownRecognition();
+      const recognition = new SpeechRecognition();
+      attachRecognition(recognition, isFreshSession);
+      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+        markActivity();
+        return true;
+      } catch (e) {
+        recognitionRef.current = null;
+        transcriptionTraceWarn("recognition.start() threw", e);
+        return false;
+      }
+    },
+    [attachRecognition, markActivity, teardownRecognition]
+  );
+
+  const recreateRecognition = useCallback(() => {
+    if (!recordingActiveRef.current) return;
+    transcriptionTrace("recreating SpeechRecognition instance");
+    const ok = startRecognitionInstance(true);
+    if (!ok) {
+      setSpeechNotice("Speech recognition paused — tap Stop then Record to restart.");
+    }
+  }, [startRecognitionInstance]);
+
+  useEffect(() => {
+    recreateRecognitionRef.current = recreateRecognition;
+  }, [recreateRecognition]);
+
   useEffect(() => {
     return () => {
       clearInterimFlushTimer();
       clearNetworkRetryTimer();
+      clearWatchdog();
     };
-  }, [clearInterimFlushTimer, clearNetworkRetryTimer]);
+  }, [clearInterimFlushTimer, clearNetworkRetryTimer, clearWatchdog]);
 
   const startRecording = useCallback(() => {
     clearNetworkRetryTimer();
+    clearWatchdog();
     skipOnEndRestartUntilRef.current = 0;
     networkBackoffMsRef.current = 2000;
     sessionNetworkErrorsRef.current = 0;
+    sessionStartedAtRef.current = Date.now();
+    lastActivityRef.current = Date.now();
 
     transcriptionTrace("startRecording invoked", { lang: language, secureContext: window.isSecureContext });
 
@@ -101,180 +334,31 @@ export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = 
     }
 
     setSpeechNotice(null);
-
-    // IMPORTANT: `recognition.start()` must run in the same user-activation turn as the click.
-    // Awaiting getUserMedia first defers this to a microtask and Chrome will not start listening
-    // (often with no visible error), so we rely on Web Speech to trigger the mic prompt.
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = language;
-
-    recognition.onstart = () => {
-      networkBackoffMsRef.current = 2000;
-      skipOnEndRestartUntilRef.current = 0;
-      transcriptionTrace("recognition.onstart — listening");
-      setSpeechNotice(null);
-    };
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      setSpeechNotice(null);
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          const finalText = result[0].transcript.trim();
-          if (finalText) {
-            const segment: TranscriptSegment = {
-              text: finalText,
-              timestamp: Date.now(),
-              isFinal: true,
-            };
-            setSegments((prev) => [...prev, segment]);
-            transcriptionTrace("recognition final segment", {
-              resultIndex: event.resultIndex,
-              sliceIndex: i,
-              chars: finalText.length,
-              text: finalText.length > 200 ? `${finalText.slice(0, 200)}…` : finalText,
-            });
-            onTranscript?.(finalText);
-          }
-          interimPendingRef.current = "";
-          clearInterimFlushTimer();
-          setInterimText("");
-        } else {
-          interim += result[0].transcript;
-        }
-      }
-      if (interim) {
-        interimPendingRef.current = interim;
-        scheduleInterimFlush();
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // "no-speech" is benign — just means silence was detected
-      if (event.error === "no-speech") return;
-
-      // `aborted` is common between phrases in Chromium — do NOT treat like `network` or we block
-      // `onend` restarts and the next finals never arrive (looks like transcription “stops”).
-      if (event.error === "aborted") {
-        if (recordingActiveRef.current) {
-          queueMicrotask(() => {
-            if (!recognitionRef.current || !recordingActiveRef.current) return;
-            try {
-              recognitionRef.current.start();
-            } catch {
-              // Already started — onend will retry
-            }
-          });
-        }
-        return;
-      }
-
-      // True network failures: back off and avoid racing `onend` with an immediate start loop.
-      if (event.error === "network") {
-        sessionNetworkErrorsRef.current += 1;
-        const n = sessionNetworkErrorsRef.current;
-        if (recordingActiveRef.current && n >= 10) {
-          setSpeechNotice(
-            "Speech has had many connection errors this session. Try desktop Chrome/Edge (not an embedded browser), turn off VPN or strict ad-block, or Stop and try again later."
-          );
-        }
-        const now = Date.now();
-        if (now - lastRecoverableSpeechLogRef.current > 10_000) {
-          lastRecoverableSpeechLogRef.current = now;
-          transcriptionTrace("recognition recoverable (retry scheduled)", {
-            error: event.error,
-            message: event.message || undefined,
-            active: recordingActiveRef.current,
-            nextDelayMs: networkBackoffMsRef.current,
-          });
-        }
-
-        const delay = networkBackoffMsRef.current;
-        networkBackoffMsRef.current = Math.min(15_000, Math.floor(delay * 1.5));
-        skipOnEndRestartUntilRef.current = now + delay + 500;
-        clearNetworkRetryTimer();
-        networkRetryTimerRef.current = setTimeout(() => {
-          networkRetryTimerRef.current = null;
-          skipOnEndRestartUntilRef.current = 0;
-          if (recognitionRef.current && recordingActiveRef.current) {
-            try {
-              recognitionRef.current.start();
-            } catch {
-              // Already started
-            }
-          }
-        }, delay);
-        return;
-      }
-
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        recordingActiveRef.current = false;
-        if (recognitionRef.current) {
-          recognitionRef.current.onend = null;
-          try {
-            recognitionRef.current.stop();
-          } catch {
-            /* ignore */
-          }
-          recognitionRef.current = null;
-        }
-        setIsRecording(false);
-        transcriptionTraceWarn("recognition stopped: mic blocked", event.error);
-        setSpeechNotice(
-          "Speech was blocked (microphone). Allow the microphone for this site, then tap Record again."
-        );
-        return;
-      }
-
-      transcriptionTraceWarn("recognition.onerror (unexpected)", {
-        error: event.error,
-        message: event.message || undefined,
-        active: recordingActiveRef.current,
-      });
-      console.error("[transcription] Speech recognition error:", event.error);
-    };
-
-    recognition.onend = () => {
-      const willRestart = Boolean(recognitionRef.current && recordingActiveRef.current);
-      const now = Date.now();
-      if (now - lastOnEndTraceRef.current > 8000) {
-        lastOnEndTraceRef.current = now;
-        transcriptionTrace("recognition.onend", { willRestart });
-      }
-      if (!recognitionRef.current || !recordingActiveRef.current) return;
-      if (now < skipOnEndRestartUntilRef.current) {
-        return;
-      }
-      // Auto-restart after silence (Chromium often ends the session between phrases even with continuous=true)
-      try {
-        recognitionRef.current.start();
-        transcriptionTrace("recognition restarted after onend");
-      } catch (e) {
-        transcriptionTraceWarn("recognition restart after onend failed", e);
-      }
-    };
-
-    recognitionRef.current = recognition;
     recordingActiveRef.current = true;
-    try {
-      recognition.start();
+
+    const ok = startRecognitionInstance(true);
+    if (ok) {
       setIsRecording(true);
       transcriptionTrace("recognition.start() ok");
-    } catch (e) {
+      watchdogTimerRef.current = setInterval(() => {
+        if (!recordingActiveRef.current) return;
+        const idle = Date.now() - lastActivityRef.current;
+        const sessionAge = Date.now() - sessionStartedAtRef.current;
+        if (idle >= WATCHDOG_IDLE_MS || sessionAge >= PROACTIVE_ROTATION_MS) {
+          transcriptionTrace("watchdog triggered recreate", { idle, sessionAge });
+          recreateRecognitionRef.current();
+        }
+      }, 15_000);
+    } else {
       recordingActiveRef.current = false;
-      recognitionRef.current = null;
-      transcriptionTraceWarn("recognition.start() threw", e);
       setSpeechNotice("Could not start speech recognition. Try again or use Chrome / Edge.");
     }
-  }, [language, onTranscript, clearInterimFlushTimer, scheduleInterimFlush, clearNetworkRetryTimer]);
+  }, [language, clearNetworkRetryTimer, clearWatchdog, startRecognitionInstance]);
 
   const stopRecording = useCallback(() => {
     transcriptionTrace("stopRecording");
     clearNetworkRetryTimer();
+    clearWatchdog();
     skipOnEndRestartUntilRef.current = 0;
     networkBackoffMsRef.current = 2000;
     sessionNetworkErrorsRef.current = 0;
@@ -282,14 +366,10 @@ export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = 
     setSpeechNotice(null);
     interimPendingRef.current = "";
     clearInterimFlushTimer();
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
+    teardownRecognition();
     setIsRecording(false);
     setInterimText("");
-  }, [clearInterimFlushTimer, clearNetworkRetryTimer]);
+  }, [clearInterimFlushTimer, clearNetworkRetryTimer, clearWatchdog, teardownRecognition]);
 
   const getFullTranscript = useCallback(() => {
     return segments.map((s) => s.text).join(" ");

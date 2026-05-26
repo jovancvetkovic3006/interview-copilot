@@ -54,6 +54,19 @@ export interface InterviewReport {
   generatedAt: number;
 }
 
+/** Manual interviewer score for a question asked during the session. */
+export interface QuestionScoreEntry {
+  id: string;
+  questionId?: string;
+  question: string;
+  category?: string;
+  /** 1–5 scale (see QUESTION_SCORE_LEVELS). */
+  score: number;
+  scoredAt: number;
+  scoredBy?: string;
+  notes?: string;
+}
+
 export interface RoomState {
   participants: Participant[];
   messages: ChatMessage[];
@@ -61,6 +74,9 @@ export interface RoomState {
   phase: "setup" | "interview" | "review";
   transcript: TranscriptEntry[];
   codingTask: unknown | null;
+  activeQuiz: unknown | null;
+  quizAnswers: unknown[];
+  questionScores: QuestionScoreEntry[];
   transcriptAnalyses: TranscriptAnalysisEntry[];
   interviewReport: InterviewReport | null;
   /**
@@ -97,6 +113,9 @@ export type RoomMessage =
   /** Server → clients: authoritative interview timer fields after phase change or extension. */
   | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
+  | { type: "quiz-start"; quiz: unknown }
+  | { type: "quiz-answer"; answer: unknown }
+  | { type: "question-score"; entry: QuestionScoreEntry }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
   | { type: "interview-report"; report: InterviewReport }

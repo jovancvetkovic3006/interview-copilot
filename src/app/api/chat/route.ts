@@ -243,7 +243,7 @@ Remember to be conversational and natural. Do not number your questions.`;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, config, action, codingTaskSubmission } = body;
+    const { messages, config, action, codingTaskSubmission, promptHint } = body;
 
     if (action === "generate-review") {
       return generateReview(body);
@@ -265,10 +265,13 @@ export async function POST(req: NextRequest) {
           }
         : undefined;
 
-    const systemPrompt = buildSystemPrompt({
+    let systemPrompt = buildSystemPrompt({
       ...config,
       ...(submission ? { codingTaskSubmission: submission } : {}),
     });
+    if (typeof promptHint === "string" && promptHint.trim()) {
+      systemPrompt += `\n\nADDITIONAL INSTRUCTION FOR THIS TURN:\n${promptHint.trim()}`;
+    }
 
     const claudeMessages = messages.map((m: { role: string; content: string }) => ({
       role: m.role === "agent" ? ("assistant" as const) : ("user" as const),

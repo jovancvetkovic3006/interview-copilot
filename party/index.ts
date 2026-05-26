@@ -29,6 +29,9 @@ export type RoomMessage =
   | { type: "time-extension"; addMinutes: 30 | 60 }
   | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
+  | { type: "quiz-start"; quiz: unknown }
+  | { type: "quiz-answer"; answer: unknown }
+  | { type: "question-score"; entry: QuestionScoreEntry }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
   | { type: "interview-report"; report: InterviewReport }
@@ -61,6 +64,17 @@ interface InterviewReport {
   generatedAt: number;
 }
 
+interface QuestionScoreEntry {
+  id: string;
+  questionId?: string;
+  question: string;
+  category?: string;
+  score: number;
+  scoredAt: number;
+  scoredBy?: string;
+  notes?: string;
+}
+
 interface RoomState {
   participants: Participant[];
   messages: ChatMessage[];
@@ -68,6 +82,9 @@ interface RoomState {
   phase: "setup" | "interview" | "review";
   transcript: { text: string; speaker: string; timestamp: number }[];
   codingTask: unknown | null;
+  activeQuiz: unknown | null;
+  quizAnswers: unknown[];
+  questionScores: QuestionScoreEntry[];
   transcriptAnalyses: TranscriptAnalysisEntry[];
   interviewReport: InterviewReport | null;
   /** First interviewer to join is the host; only the host can run setup. */
@@ -100,6 +117,9 @@ export default class InterviewRoom implements Party.Server {
     phase: "setup",
     transcript: [],
     codingTask: null,
+    activeQuiz: null,
+    quizAnswers: [],
+    questionScores: [],
     transcriptAnalyses: [],
     interviewReport: null,
     hostParticipantId: null,
@@ -294,9 +314,29 @@ export default class InterviewRoom implements Party.Server {
       case "coding-task": {
         const task = assignCollaborationTaskId(data.task);
         this.state.codingTask = task;
-        // Include the sender so their client gets the same `collaborationTaskId` as everyone else
-        // (otherwise interviewer and candidate would use different Yjs room names).
+        this.state.activeQuiz = null;
         this.room.broadcast(JSON.stringify({ type: "coding-task", task } satisfies RoomMessage));
+        break;
+      }
+
+      case "quiz-start": {
+        const quiz = data.quiz;
+        this.state.activeQuiz = quiz;
+        this.state.codingTask = null;
+        this.state.quizAnswers = [];
+        this.room.broadcast(JSON.stringify({ type: "quiz-start", quiz } satisfies RoomMessage));
+        break;
+      }
+
+      case "quiz-answer": {
+        this.state.quizAnswers.push(data.answer);
+        this.room.broadcast(JSON.stringify(data), [sender.id]);
+        break;
+      }
+
+      case "question-score": {
+        this.state.questionScores.push(data.entry);
+        this.room.broadcast(JSON.stringify(data), [sender.id]);
         break;
       }
 
