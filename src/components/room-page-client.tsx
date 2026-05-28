@@ -1432,11 +1432,6 @@ If the quiz is still in progress, note what is provisional and what to watch for
             Scheduled time has ended. Please wait — the host can add more time or end the interview to generate the review.
           </div>
         )}
-        {phase === "interview" && !isRecording && speechSupported && (
-          <div className="px-4 py-2 text-center text-sm bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 border-b border-blue-200 dark:border-blue-900/50">
-            Tap <strong>Record</strong> when you speak so the interview panel can capture your answers (not shown on your screen).
-          </div>
-        )}
 
         {hasHistory && assignmentHistoryStrip}
 
@@ -1482,7 +1477,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
               <p className="text-sm text-zinc-500 max-w-sm">
                 {hasHistory
                   ? "Pick a coding task or quiz above to continue, or wait for a new assignment."
-                  : "Waiting for the interviewer to assign a coding task or quiz. Use the Record above when you speak your answers."}
+                  : "Waiting for the interviewer to assign a coding task or quiz."}
               </p>
             </div>
           )}
