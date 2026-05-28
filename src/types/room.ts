@@ -55,6 +55,26 @@ export interface InterviewReport {
 }
 
 /** Manual interviewer score for a question asked during the session. */
+/** One coding task opened in the room (Yjs doc keyed by `collaborationTaskId`). */
+export interface CodingTaskHistoryEntry {
+  collaborationTaskId: string;
+  task: unknown;
+  assignedAt: number;
+  title: string;
+}
+
+/** One live quiz assignment with frozen answers when another quiz becomes active. */
+export interface QuizHistoryEntry {
+  quizId: string;
+  quiz: unknown;
+  assignedAt: number;
+  answers: unknown[];
+  quizCandidateStarted: boolean;
+  quizSubmission: unknown | null;
+}
+
+export type ActiveAssignment = "none" | "coding" | "quiz";
+
 export interface QuestionScoreEntry {
   id: string;
   questionId?: string;
@@ -74,7 +94,11 @@ export interface RoomState {
   phase: "setup" | "interview" | "review";
   transcript: TranscriptEntry[];
   codingTask: unknown | null;
+  codingTaskHistory: CodingTaskHistoryEntry[];
   activeQuiz: unknown | null;
+  quizHistory: QuizHistoryEntry[];
+  /** Which main-panel assignment is visible (coding editor vs quiz). */
+  activeAssignment: ActiveAssignment;
   quizAnswers: unknown[];
   /** True once the candidate clicks Start on an assigned live quiz. */
   quizCandidateStarted: boolean;
@@ -118,6 +142,19 @@ export type RoomMessage =
   | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
   | { type: "quiz-start"; quiz: unknown }
+  | { type: "activate-coding-task"; collaborationTaskId: string }
+  | { type: "activate-quiz"; quizId: string }
+  | {
+      type: "assignment-state";
+      activeAssignment: ActiveAssignment;
+      codingTask: unknown | null;
+      activeQuiz: unknown | null;
+      quizAnswers: unknown[];
+      quizCandidateStarted: boolean;
+      quizSubmission: unknown | null;
+      codingTaskHistory: CodingTaskHistoryEntry[];
+      quizHistory: QuizHistoryEntry[];
+    }
   | { type: "quiz-candidate-started" }
   | { type: "quiz-answer"; answer: unknown }
   | { type: "quiz-complete"; submission: unknown }

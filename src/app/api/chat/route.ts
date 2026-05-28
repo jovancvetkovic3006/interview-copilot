@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { formatLiveQuizForPrompt, type LiveQuizAgentContext } from "@/lib/quiz-summary";
 
 // Model fallback chain — tries each model in order until one works
 const MODEL_FALLBACK_CHAIN = [
@@ -55,6 +56,10 @@ function buildSystemPrompt(config: {
   }[];
   /** Recent live transcript lines from all participants (candidate + interviewers). */
   recentTranscript?: { speaker: string; role: string; text: string }[];
+  /** All live quizzes assigned this session (including earlier ones revisited from history). */
+  liveQuizHistory?: LiveQuizAgentContext[];
+  /** Live in-room quiz currently selected in the UI (may be in progress). */
+  liveQuizContext?: LiveQuizAgentContext;
   recentQuestionScores?: { question: string; score: number; category?: string }[];
   preInterviewTask?: {
     title: string;
@@ -158,6 +163,28 @@ ${config.recentQuestionScores
   .join("\n")}`;
   }
 
+  let quizReviewBehaviorHint = "";
+  if (config.liveQuizHistory && config.liveQuizHistory.length > 0) {
+    prompt += `
+
+ALL LIVE QUIZZES THIS SESSION (newest last; candidate may revisit any from history):`;
+    config.liveQuizHistory.forEach((quizCtx, idx) => {
+      prompt += `\n\n--- Quiz ${idx + 1}: ${quizCtx.title} (${quizCtx.status}) ---\n${formatLiveQuizForPrompt(quizCtx)}`;
+    });
+  }
+
+  if (config.liveQuizContext) {
+    const quizCtx = config.liveQuizContext;
+    prompt += `
+
+CURRENTLY SELECTED LIVE QUIZ (multiple-choice):
+${formatLiveQuizForPrompt(quizCtx)}`;
+    quizReviewBehaviorHint = `- When the interviewer asks about the quiz (or quiz data is relevant), summarize performance, weak topics, and patterns (speed, skipped questions).
+- Suggest 3-5 concrete verbal follow-up questions to probe wrong answers or validate strengths — reference specific quiz questions when useful.
+- If status is "in-progress", treat partial results as provisional and note what is still unanswered.
+- Do not reveal correct answers to the candidate; you are advising the interviewer only.`;
+  }
+
   if (config.preInterviewTask) {
     prompt += `
 
@@ -252,10 +279,11 @@ Your role and behavior:
 - Do not claim to have directly observed non-textual behavior (body language, tone confidence, etc.) unless explicitly present in provided data.
 - Do not emit [INTERVIEW_COMPLETE] or similar control markers.
 ${codingReviewBehaviorHint}
+${quizReviewBehaviorHint}
 
 Output format (for interviewer assistant panel):
 - Keep responses concise and actionable.
-- Prefer sections like **Next best question**, **Follow-ups**, **Scoring hint**, **What to probe**.
+- Prefer sections like **Next best question**, **Follow-ups**, **Scoring hint**, **Quiz summary**, **What to probe**.
 - Provide clickable-style short question options (single-sentence) the interviewer can ask verbatim.
 - Keep paragraphs short (1-3 sentences).
 - Do not number every reply unless ranking options helps.`;

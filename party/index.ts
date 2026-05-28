@@ -30,6 +30,19 @@ export type RoomMessage =
   | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
   | { type: "quiz-start"; quiz: unknown }
+  | { type: "activate-coding-task"; collaborationTaskId: string }
+  | { type: "activate-quiz"; quizId: string }
+  | {
+      type: "assignment-state";
+      activeAssignment: "none" | "coding" | "quiz";
+      codingTask: unknown | null;
+      activeQuiz: unknown | null;
+      quizAnswers: unknown[];
+      quizCandidateStarted: boolean;
+      quizSubmission: unknown | null;
+      codingTaskHistory: CodingTaskHistoryEntry[];
+      quizHistory: QuizHistoryEntry[];
+    }
   | { type: "quiz-candidate-started" }
   | { type: "quiz-answer"; answer: unknown }
   | { type: "quiz-complete"; submission: unknown }
@@ -77,6 +90,22 @@ interface QuestionScoreEntry {
   notes?: string;
 }
 
+interface CodingTaskHistoryEntry {
+  collaborationTaskId: string;
+  task: unknown;
+  assignedAt: number;
+  title: string;
+}
+
+interface QuizHistoryEntry {
+  quizId: string;
+  quiz: unknown;
+  assignedAt: number;
+  answers: unknown[];
+  quizCandidateStarted: boolean;
+  quizSubmission: unknown | null;
+}
+
 interface RoomState {
   participants: Participant[];
   messages: ChatMessage[];
@@ -84,7 +113,10 @@ interface RoomState {
   phase: "setup" | "interview" | "review";
   transcript: { text: string; speaker: string; timestamp: number }[];
   codingTask: unknown | null;
+  codingTaskHistory: CodingTaskHistoryEntry[];
   activeQuiz: unknown | null;
+  quizHistory: QuizHistoryEntry[];
+  activeAssignment: "none" | "coding" | "quiz";
   quizAnswers: unknown[];
   quizCandidateStarted: boolean;
   quizSubmission: unknown | null;
@@ -106,6 +138,24 @@ function assignCollaborationTaskId(task: unknown): unknown {
   return task;
 }
 
+function taskCollaborationId(task: unknown): string | null {
+  if (task === null || typeof task !== "object") return null;
+  const id = (task as { collaborationTaskId?: string }).collaborationTaskId;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
+function taskTitle(task: unknown): string {
+  if (task === null || typeof task !== "object") return "Coding task";
+  const t = (task as { title?: string }).title;
+  return typeof t === "string" && t.trim() ? t.trim() : "Coding task";
+}
+
+function quizIdOf(quiz: unknown): string | null {
+  if (quiz === null || typeof quiz !== "object") return null;
+  const id = (quiz as { quizId?: string }).quizId;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
 export default class InterviewRoom implements Party.Server {
   constructor(readonly room: Party.Room) {}
 
@@ -121,7 +171,10 @@ export default class InterviewRoom implements Party.Server {
     phase: "setup",
     transcript: [],
     codingTask: null,
+    codingTaskHistory: [],
     activeQuiz: null,
+    quizHistory: [],
+    activeAssignment: "none",
     quizAnswers: [],
     quizCandidateStarted: false,
     quizSubmission: null,
@@ -139,6 +192,72 @@ export default class InterviewRoom implements Party.Server {
         type: "sync-response",
         state: this.state,
       })
+    );
+  }
+
+  private persistActiveQuizToHistory() {
+    const qid = quizIdOf(this.state.activeQuiz);
+    if (!qid) return;
+    const entry: QuizHistoryEntry = {
+      quizId: qid,
+      quiz: this.state.activeQuiz,
+      assignedAt:
+        this.state.quizHistory.find((h) => h.quizId === qid)?.assignedAt ?? Date.now(),
+      answers: [...this.state.quizAnswers],
+      quizCandidateStarted: this.state.quizCandidateStarted,
+      quizSubmission: this.state.quizSubmission,
+    };
+    const idx = this.state.quizHistory.findIndex((h) => h.quizId === qid);
+    if (idx >= 0) this.state.quizHistory[idx] = entry;
+    else this.state.quizHistory.push(entry);
+  }
+
+  private upsertCodingTaskHistory(task: unknown) {
+    const cid = taskCollaborationId(task);
+    if (!cid) return;
+    const entry: CodingTaskHistoryEntry = {
+      collaborationTaskId: cid,
+      task,
+      assignedAt: Date.now(),
+      title: taskTitle(task),
+    };
+    const idx = this.state.codingTaskHistory.findIndex((h) => h.collaborationTaskId === cid);
+    if (idx >= 0) {
+      this.state.codingTaskHistory[idx] = {
+        ...entry,
+        assignedAt: this.state.codingTaskHistory[idx].assignedAt,
+      };
+    } else {
+      this.state.codingTaskHistory.push(entry);
+    }
+  }
+
+  private syncActiveQuizHistoryFields() {
+    const qid = quizIdOf(this.state.activeQuiz);
+    if (!qid) return;
+    const idx = this.state.quizHistory.findIndex((h) => h.quizId === qid);
+    if (idx < 0) return;
+    this.state.quizHistory[idx] = {
+      ...this.state.quizHistory[idx],
+      answers: [...this.state.quizAnswers],
+      quizCandidateStarted: this.state.quizCandidateStarted,
+      quizSubmission: this.state.quizSubmission,
+    };
+  }
+
+  private broadcastAssignmentState() {
+    this.room.broadcast(
+      JSON.stringify({
+        type: "assignment-state",
+        activeAssignment: this.state.activeAssignment,
+        codingTask: this.state.codingTask,
+        activeQuiz: this.state.activeQuiz,
+        quizAnswers: this.state.quizAnswers,
+        quizCandidateStarted: this.state.quizCandidateStarted,
+        quizSubmission: this.state.quizSubmission,
+        codingTaskHistory: this.state.codingTaskHistory,
+        quizHistory: this.state.quizHistory,
+      } satisfies RoomMessage)
     );
   }
 
@@ -318,27 +437,72 @@ export default class InterviewRoom implements Party.Server {
       }
 
       case "coding-task": {
+        this.persistActiveQuizToHistory();
         const task = assignCollaborationTaskId(data.task);
+        this.upsertCodingTaskHistory(task);
         this.state.codingTask = task;
-        this.state.activeQuiz = null;
+        this.state.activeAssignment = "coding";
         this.room.broadcast(JSON.stringify({ type: "coding-task", task } satisfies RoomMessage));
+        this.broadcastAssignmentState();
         break;
       }
 
       case "quiz-start": {
+        this.persistActiveQuizToHistory();
         const quiz = data.quiz;
+        const qid = quizIdOf(quiz);
         this.state.activeQuiz = quiz;
-        this.state.codingTask = null;
         this.state.quizAnswers = [];
         this.state.quizCandidateStarted = false;
         this.state.quizSubmission = null;
+        this.state.activeAssignment = "quiz";
+        if (qid) {
+          const entry: QuizHistoryEntry = {
+            quizId: qid,
+            quiz,
+            assignedAt: Date.now(),
+            answers: [],
+            quizCandidateStarted: false,
+            quizSubmission: null,
+          };
+          const idx = this.state.quizHistory.findIndex((h) => h.quizId === qid);
+          if (idx >= 0) this.state.quizHistory[idx] = entry;
+          else this.state.quizHistory.push(entry);
+        }
         this.room.broadcast(JSON.stringify({ type: "quiz-start", quiz } satisfies RoomMessage));
+        this.broadcastAssignmentState();
+        break;
+      }
+
+      case "activate-coding-task": {
+        this.persistActiveQuizToHistory();
+        const cid = data.collaborationTaskId;
+        const entry = this.state.codingTaskHistory.find((h) => h.collaborationTaskId === cid);
+        if (!entry) break;
+        this.state.codingTask = entry.task;
+        this.state.activeAssignment = "coding";
+        this.broadcastAssignmentState();
+        break;
+      }
+
+      case "activate-quiz": {
+        this.persistActiveQuizToHistory();
+        const entry = this.state.quizHistory.find((h) => h.quizId === data.quizId);
+        if (!entry) break;
+        this.state.activeQuiz = entry.quiz;
+        this.state.quizAnswers = [...entry.answers];
+        this.state.quizCandidateStarted = entry.quizCandidateStarted;
+        this.state.quizSubmission = entry.quizSubmission;
+        this.state.activeAssignment = "quiz";
+        this.broadcastAssignmentState();
         break;
       }
 
       case "quiz-candidate-started": {
         this.state.quizCandidateStarted = true;
+        this.syncActiveQuizHistoryFields();
         this.room.broadcast(JSON.stringify({ type: "quiz-candidate-started" } satisfies RoomMessage));
+        this.broadcastAssignmentState();
         break;
       }
 
@@ -355,14 +519,27 @@ export default class InterviewRoom implements Party.Server {
           );
         }
         this.state.quizAnswers.push(data.answer);
+        this.state.quizCandidateStarted = true;
+        this.syncActiveQuizHistoryFields();
         this.room.broadcast(JSON.stringify(data), [sender.id]);
+        this.broadcastAssignmentState();
         break;
       }
 
       case "quiz-complete": {
         this.state.quizSubmission = data.submission;
         this.state.quizCandidateStarted = true;
+        if (
+          data.submission &&
+          typeof data.submission === "object" &&
+          "answers" in data.submission &&
+          Array.isArray((data.submission as { answers: unknown[] }).answers)
+        ) {
+          this.state.quizAnswers = (data.submission as { answers: unknown[] }).answers;
+        }
+        this.syncActiveQuizHistoryFields();
         this.room.broadcast(JSON.stringify({ type: "quiz-complete", submission: data.submission } satisfies RoomMessage));
+        this.broadcastAssignmentState();
         break;
       }
 

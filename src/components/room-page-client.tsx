@@ -4,7 +4,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { usePartyRoom } from "@/hooks/use-party-room";
 import { useSpeechTranscription } from "@/hooks/use-speech-transcription";
 import type { Participant, QuestionScoreEntry } from "@/types/room";
-import type { ActiveQuiz } from "@/types/quiz";
+import type { ActiveQuiz, QuizAnswerEntry, QuizSubmission } from "@/types/quiz";
 import type {
   CodingTaskAssignmentSnapshot,
   CodingTaskPreset,
@@ -31,8 +31,10 @@ import { AgentMessage } from "@/components/agent-message";
 import { CvSuggestionsPanel } from "@/components/cv-suggestions-panel";
 import { LiveQuizPanel } from "@/components/live-quiz-panel";
 import { QuizResultsSummary } from "@/components/quiz-results-summary";
+import { AssignmentHistoryStrip } from "@/components/assignment-history-strip";
 import { QuestionScorePrompt } from "@/components/question-score-prompt";
 import { scoreLevelLabel } from "@/lib/question-scoring";
+import { buildLiveQuizAgentContext } from "@/lib/quiz-summary";
 import {
   Users,
   Wifi,
@@ -181,13 +183,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
 
   /** Shared panel editor (interviewer view) — read Yjs text for AI code review. */
   const panelCodingEditorRef = useRef<CollaborativeEditorHandle>(null);
-  /**
-   * Host-only: every distinct coding task opened in the room (deduped by `collaborationTaskId`),
-   * for the final report's "Coding summary" section. Reset when a new interview session starts
-   * from setup.
-   */
-  const codingTaskAssignmentHistoryRef = useRef<CodingTaskAssignmentSnapshot[]>([]);
-
   const {
     connected,
     participants,
@@ -197,7 +192,10 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     phase,
     config: sharedConfig,
     codingTask,
+    codingTaskHistory,
     activeQuiz,
+    quizHistory,
+    activeAssignment,
     quizAnswers,
     quizCandidateStarted,
     quizSubmission,
@@ -213,7 +211,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     sendPhase,
     sendConfig,
     sendCodingTask,
+    sendActivateCodingTask,
     sendQuizStart,
+    sendActivateQuiz,
     sendQuizAnswer,
     sendQuizCandidateStarted,
     sendQuizComplete,
@@ -228,37 +228,40 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     !!hostParticipantId &&
     hostParticipantId === participant.id;
 
-  /** Host only: record each distinct coding task opened in the room (deduped) for the end-of-interview report. */
-  useEffect(() => {
-    if (!isHost || phase !== "interview") return;
-    const raw = codingTask;
-    if (raw === null || typeof raw !== "object") return;
-    const t = raw as Record<string, unknown>;
-    const title = typeof t.title === "string" ? t.title.trim() : "";
-    if (!title) return;
-    const cid =
-      typeof t.collaborationTaskId === "string" && t.collaborationTaskId.trim().length > 0
-        ? t.collaborationTaskId.trim()
-        : undefined;
-    const desc = typeof t.description === "string" ? t.description : "";
-    const lang = typeof t.language === "string" && t.language.trim() ? t.language : "text";
-    const src = typeof t.source === "string" ? t.source : undefined;
-    const hist = codingTaskAssignmentHistoryRef.current;
-    if (cid) {
-      if (hist.some((h) => h.collaborationTaskId === cid)) return;
-    } else {
-      const sig = `${title}|${desc.slice(0, 240)}`;
-      if (hist.some((h) => !h.collaborationTaskId && `${h.title}|${h.description.slice(0, 240)}` === sig)) return;
-    }
-    hist.push({
-      collaborationTaskId: cid,
-      title,
-      description: desc,
-      language: lang,
-      source: src,
-      recordedAt: Date.now(),
+  const effectiveAssignment =
+    activeAssignment !== "none"
+      ? activeAssignment
+      : (activeQuiz as ActiveQuiz | null)?.questions?.length
+        ? "quiz"
+        : (codingTask as { title?: string } | null)?.title
+          ? "coding"
+          : "none";
+
+  const activeCodingTaskId = useMemo(() => {
+    const t = codingTask as { collaborationTaskId?: string } | null;
+    return typeof t?.collaborationTaskId === "string" && t.collaborationTaskId.trim()
+      ? t.collaborationTaskId.trim()
+      : null;
+  }, [codingTask]);
+
+  const activeQuizId = useMemo(() => {
+    const q = activeQuiz as ActiveQuiz | null;
+    return q?.quizId?.trim() || null;
+  }, [activeQuiz]);
+
+  const reportCodingTaskHistory = useMemo((): CodingTaskAssignmentSnapshot[] => {
+    return codingTaskHistory.map((entry) => {
+      const t = entry.task as Record<string, unknown>;
+      return {
+        collaborationTaskId: entry.collaborationTaskId,
+        title: entry.title,
+        description: typeof t.description === "string" ? t.description : "",
+        language: typeof t.language === "string" && t.language.trim() ? t.language : "text",
+        source: typeof t.source === "string" ? t.source : undefined,
+        recordedAt: entry.assignedAt,
+      };
     });
-  }, [codingTask, phase, isHost]);
+  }, [codingTaskHistory]);
 
   /**
    * Derived interview config. `sendConfig` already updates `sharedConfig` synchronously for the host,
@@ -364,10 +367,58 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               })),
             }
           : {}),
+        ...(() => {
+          const aq = activeQuiz as ActiveQuiz | null;
+          const contexts = quizHistory
+            .map((entry) => {
+              const q = entry.quiz as ActiveQuiz;
+              if (!q?.questions?.length) return null;
+              return buildLiveQuizAgentContext(q, entry.answers as QuizAnswerEntry[], {
+                submission: (entry.quizSubmission as QuizSubmission | null) ?? null,
+                candidateStarted: entry.quizCandidateStarted,
+              });
+            })
+            .filter((c): c is NonNullable<typeof c> => c != null);
+          const activeCtx =
+            aq?.questions?.length
+              ? buildLiveQuizAgentContext(aq, quizAnswers, {
+                  submission: quizSubmission,
+                  candidateStarted: quizCandidateStarted,
+                })
+              : null;
+          if (!activeCtx && contexts.length === 0) return {};
+          return {
+            ...(activeCtx ? { liveQuizContext: activeCtx } : {}),
+            ...(contexts.length ? { liveQuizHistory: contexts } : {}),
+          };
+        })(),
         collaborativeRoom: true as const,
       };
     },
-    [participants, participant?.name, transcriptAnalyses, questionScores, transcript]
+    [
+      participants,
+      participant?.name,
+      transcriptAnalyses,
+      questionScores,
+      transcript,
+      activeQuiz,
+      quizHistory,
+      quizAnswers,
+      quizSubmission,
+      quizCandidateStarted,
+    ]
+  );
+
+  const assignmentHistoryStrip = (
+    <AssignmentHistoryStrip
+      activeAssignment={effectiveAssignment}
+      codingTaskHistory={codingTaskHistory}
+      quizHistory={quizHistory}
+      activeCodingTaskId={activeCodingTaskId}
+      activeQuizId={activeQuizId}
+      onSelectCoding={sendActivateCodingTask}
+      onSelectQuiz={sendActivateQuiz}
+    />
   );
 
   const speakerRoleByName = useMemo(() => {
@@ -630,7 +681,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   );
 
   const handleSetupComplete = async (config: InterviewConfig) => {
-    codingTaskAssignmentHistoryRef.current = [];
     sendConfig(config);
     sendPhase("interview");
     setStep("interview");
@@ -758,12 +808,96 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     resolveAgentApiConfig,
   ]);
 
+  const handleReviewQuiz = useCallback(async () => {
+    if (!participant || participant.role !== "interviewer") return;
+    if (phase !== "interview") return;
+    const quiz = activeQuiz as ActiveQuiz | null;
+    if (!quiz?.questions?.length) return;
+
+    const ctx = buildLiveQuizAgentContext(quiz, quizAnswers, {
+      submission: quizSubmission,
+      candidateStarted: quizCandidateStarted,
+    });
+    const statusLabel =
+      ctx.status === "complete"
+        ? "completed"
+        : ctx.status === "in-progress"
+          ? "in progress"
+          : "assigned (not started)";
+
+    const msg = {
+      id: `msg-${Date.now()}`,
+      role: "user" as const,
+      content: `Requested AI review of live quiz "${quiz.title}" (${statusLabel}, ${ctx.correctCount}/${ctx.totalQuestions} correct so far).`,
+      senderName: participant.name,
+      timestamp: Date.now(),
+    };
+    sendChat(msg);
+    setAgentTyping(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, msg].map((m) => ({
+            role: m.role === "agent" ? "agent" : "interviewer",
+            content: m.content,
+          })),
+          config: resolveAgentApiConfig(roomConfig),
+          promptHint: `The interviewer asked you to review the live quiz "${quiz.title}" (status: ${ctx.status}).
+Summarize how the candidate performed (${ctx.correctCount}/${ctx.totalQuestions} correct, ${ctx.percentCorrect}%).
+Call out weak topics and any skipped or slow questions.
+Suggest 3-5 specific verbal follow-up questions to probe mistakes or confirm strengths — reference question numbers/topics when helpful.
+If the quiz is still in progress, note what is provisional and what to watch for in remaining answers.`,
+        }),
+      });
+      const text = await res.text();
+      if (text) {
+        const data = JSON.parse(text) as { content?: string };
+        if (data.content) sendAgentResponse(data.content);
+      }
+    } catch (err) {
+      console.error("Quiz review agent error:", err);
+    } finally {
+      setAgentTyping(false);
+    }
+  }, [
+    participant,
+    phase,
+    activeQuiz,
+    quizAnswers,
+    quizSubmission,
+    quizCandidateStarted,
+    messages,
+    roomConfig,
+    sendChat,
+    sendAgentResponse,
+    resolveAgentApiConfig,
+  ]);
+
   const handleChatKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
+
+  const interviewerActiveQuiz =
+    effectiveAssignment === "quiz" ? (activeQuiz as ActiveQuiz | null) : null;
+  const interviewerCodingTask =
+    effectiveAssignment === "coding"
+      ? (codingTask as {
+          title?: string;
+          description?: string;
+          language?: string;
+          starterCode?: string;
+          collaborationTaskId?: string;
+          source?: string;
+        } | null)
+      : null;
+  const showInterviewerQuiz = Boolean(interviewerActiveQuiz?.questions?.length);
+  const showInterviewerCoding = Boolean(interviewerCodingTask?.title);
+  const hasAssignmentHistory = codingTaskHistory.length > 0 || quizHistory.length > 0;
 
   const configuredRole = roomConfig?.role || "Frontend Developer";
   const configuredDifficulty = roomConfig?.difficulty || "mid";
@@ -995,7 +1129,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           transcriptAnalyses,
           config: roomConfig,
           codingTask,
-          codingTaskHistory: [...codingTaskAssignmentHistoryRef.current],
+          codingTaskHistory: reportCodingTaskHistory,
+          quizHistory,
           finalCode,
           interviewerSessionNotes: effectiveNotes || undefined,
           questionScores,
@@ -1218,9 +1353,22 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
 
   // ── Candidate view: coding task or quiz only (no AI agent chat) ──
   if (participant?.role === "candidate") {
-    const liveQuiz = activeQuiz as ActiveQuiz | null;
-    const hasQuiz = Boolean(liveQuiz?.questions?.length);
-    const hasCodingTask = Boolean((codingTask as { title?: string } | null)?.title);
+    const liveQuiz =
+      effectiveAssignment === "quiz" ? (activeQuiz as ActiveQuiz | null) : null;
+    const codingForView =
+      effectiveAssignment === "coding"
+        ? (codingTask as {
+            title?: string;
+            description?: string;
+            language?: string;
+            starterCode?: string;
+            collaborationTaskId?: string;
+            source?: string;
+          } | null)
+        : null;
+    const showQuiz = Boolean(liveQuiz?.questions?.length);
+    const showCoding = Boolean(codingForView?.title);
+    const hasHistory = codingTaskHistory.length > 0 || quizHistory.length > 0;
 
     return (
       <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
@@ -1290,9 +1438,12 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           </div>
         )}
 
+        {hasHistory && assignmentHistoryStrip}
+
         <div className="flex-1 flex overflow-hidden min-h-0">
-          {hasQuiz && liveQuiz ? (
+          {showQuiz && liveQuiz ? (
             <LiveQuizPanel
+              key={liveQuiz.quizId}
               quiz={liveQuiz}
               participantName={participant?.name || "Candidate"}
               existingAnswers={quizAnswers}
@@ -1306,20 +1457,21 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 })
               }
             />
-          ) : hasCodingTask ? (
+          ) : showCoding && codingForView ? (
             <CollaborativeEditor
+              key={codingForView.collaborationTaskId ?? codingForView.title}
               roomId={roomCode}
               participantName={participant?.name || "Anonymous"}
               participantRole="candidate"
-              language={(codingTask as { language?: string })?.language || "javascript"}
-              taskTitle={(codingTask as { title?: string })?.title}
-              taskDescription={(codingTask as { description?: string })?.description}
-              starterCode={(codingTask as { starterCode?: string })?.starterCode}
-              collaborationTaskId={(codingTask as { collaborationTaskId?: string })?.collaborationTaskId}
+              language={codingForView.language || "javascript"}
+              taskTitle={codingForView.title}
+              taskDescription={codingForView.description}
+              starterCode={codingForView.starterCode}
+              collaborationTaskId={codingForView.collaborationTaskId}
               taskSource={
-                (codingTask as { source?: string } | null)?.source === "pre-interview-task"
+                codingForView.source === "pre-interview-task"
                   ? "pre-interview-task"
-                  : (codingTask as { source?: string } | null)?.source === "external-pre-task"
+                  : codingForView.source === "external-pre-task"
                     ? "external-pre-task"
                     : undefined
               }
@@ -1328,7 +1480,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
               <MessageSquare className="h-10 w-10 text-zinc-300 mb-3" />
               <p className="text-sm text-zinc-500 max-w-sm">
-                Waiting for the interviewer to assign a coding task or quiz. Use the Record above when you speak your answers.
+                {hasHistory
+                  ? "Pick a coding task or quiz above to continue, or wait for a new assignment."
+                  : "Waiting for the interviewer to assign a coding task or quiz. Use the Record above when you speak your answers."}
               </p>
             </div>
           )}
@@ -1526,6 +1680,20 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             >
               <Sparkles className="h-3.5 w-3.5" />
               Review candidate code
+            </Button>
+          )}
+          {phase === "interview" && showInterviewerQuiz && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-indigo-300 text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-200 dark:hover:bg-indigo-950/50"
+              onClick={() => void handleReviewQuiz()}
+              disabled={agentTyping}
+              title="Ask the assistant to summarize quiz results and suggest follow-up questions"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Review quiz
             </Button>
           )}
           {isHost && phase === "interview" && (
@@ -2121,6 +2289,17 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                               : "waiting"
                         }
                       />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-[11px] border-indigo-300 text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-200"
+                        onClick={() => void handleReviewQuiz()}
+                        disabled={agentTyping}
+                      >
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                        Ask agent to review quiz
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -2169,17 +2348,31 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         )}
 
         <div className="flex-1 flex flex-col min-h-0">
-          {(activeQuiz as ActiveQuiz | null)?.questions?.length ? (
+          {hasAssignmentHistory && assignmentHistoryStrip}
+          {showInterviewerQuiz ? (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="shrink-0 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-indigo-50/50 dark:bg-indigo-950/20">
-                <p className="text-xs font-medium text-indigo-900 dark:text-indigo-100">Live quiz — candidate view</p>
-                <p className="text-[10px] text-indigo-800/80 dark:text-indigo-200/80">
-                  Results update in real time as the candidate answers.
-                </p>
+              <div className="shrink-0 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-indigo-50/50 dark:bg-indigo-950/20 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-indigo-900 dark:text-indigo-100">Live quiz — candidate view</p>
+                  <p className="text-[10px] text-indigo-800/80 dark:text-indigo-200/80">
+                    Results update in real time. The assistant also receives quiz data on every reply.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-8 text-[11px] border-indigo-300 text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-200"
+                  onClick={() => void handleReviewQuiz()}
+                  disabled={agentTyping}
+                >
+                  <Sparkles className="h-3.5 w-3.5 mr-1" />
+                  Review quiz
+                </Button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <QuizResultsSummary
-                  quiz={activeQuiz as ActiveQuiz}
+                  quiz={interviewerActiveQuiz!}
                   answers={quizAnswers}
                   submission={quizSubmission}
                   status={
@@ -2192,7 +2385,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 />
                 {quizCandidateStarted && !quizSubmission && (
                   <LiveQuizPanel
-                    quiz={activeQuiz as ActiveQuiz}
+                    key={interviewerActiveQuiz!.quizId}
+                    quiz={interviewerActiveQuiz!}
                     participantName="Candidate"
                     existingAnswers={quizAnswers}
                     onAnswer={() => {}}
@@ -2203,26 +2397,33 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 )}
               </div>
             </div>
-          ) : (
+          ) : showInterviewerCoding ? (
             <CollaborativeEditor
+              key={interviewerCodingTask!.collaborationTaskId ?? interviewerCodingTask!.title}
               ref={panelCodingEditorRef}
               roomId={roomCode}
               participantName={participant?.name || "Anonymous"}
               participantRole="interviewer"
               isSeeder={isHost}
-              language={(codingTask as { language?: string })?.language || "javascript"}
-              taskTitle={(codingTask as { title?: string })?.title}
-              taskDescription={(codingTask as { description?: string })?.description}
-              starterCode={(codingTask as { starterCode?: string })?.starterCode}
-              collaborationTaskId={(codingTask as { collaborationTaskId?: string })?.collaborationTaskId}
+              language={interviewerCodingTask!.language || "javascript"}
+              taskTitle={interviewerCodingTask!.title}
+              taskDescription={interviewerCodingTask!.description}
+              starterCode={interviewerCodingTask!.starterCode}
+              collaborationTaskId={interviewerCodingTask!.collaborationTaskId}
               taskSource={
-                (codingTask as { source?: string } | null)?.source === "pre-interview-task"
+                interviewerCodingTask!.source === "pre-interview-task"
                   ? "pre-interview-task"
-                  : (codingTask as { source?: string } | null)?.source === "external-pre-task"
+                  : interviewerCodingTask!.source === "external-pre-task"
                     ? "external-pre-task"
                     : undefined
               }
             />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-sm text-zinc-500">
+              {hasAssignmentHistory
+                ? "Select a coding task or quiz from history above, or assign a new one from the Q&A panel."
+                : "Assign a coding task or quiz from the Q&A panel."}
+            </div>
           )}
         </div>
       </div>

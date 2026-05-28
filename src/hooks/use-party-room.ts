@@ -12,6 +12,9 @@ import type {
   TranscriptAnalysisEntry,
   InterviewReport,
   QuestionScoreEntry,
+  CodingTaskHistoryEntry,
+  QuizHistoryEntry,
+  ActiveAssignment,
 } from "@/types/room";
 import type { QuizAnswerEntry, QuizSubmission } from "@/types/quiz";
 
@@ -31,7 +34,10 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const [phase, setPhase] = useState<RoomState["phase"]>("setup");
   const [config, setConfig] = useState<unknown | null>(null);
   const [codingTask, setCodingTask] = useState<unknown | null>(null);
+  const [codingTaskHistory, setCodingTaskHistory] = useState<CodingTaskHistoryEntry[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<unknown | null>(null);
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
+  const [activeAssignment, setActiveAssignment] = useState<ActiveAssignment>("none");
   const [quizAnswers, setQuizAnswers] = useState<QuizAnswerEntry[]>([]);
   const [quizCandidateStarted, setQuizCandidateStarted] = useState(false);
   const [quizSubmission, setQuizSubmission] = useState<QuizSubmission | null>(null);
@@ -74,6 +80,26 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
         JSON.stringify({ type: "join", participant } satisfies RoomMessage)
       );
     });
+
+    const applyAssignmentState = (payload: {
+      activeAssignment: ActiveAssignment;
+      codingTask: unknown | null;
+      activeQuiz: unknown | null;
+      quizAnswers: unknown[];
+      quizCandidateStarted: boolean;
+      quizSubmission: unknown | null;
+      codingTaskHistory: CodingTaskHistoryEntry[];
+      quizHistory: QuizHistoryEntry[];
+    }) => {
+      setActiveAssignment(payload.activeAssignment);
+      setCodingTask(payload.codingTask);
+      setActiveQuiz(payload.activeQuiz);
+      setQuizAnswers(payload.quizAnswers as QuizAnswerEntry[]);
+      setQuizCandidateStarted(payload.quizCandidateStarted);
+      setQuizSubmission((payload.quizSubmission as QuizSubmission | null) ?? null);
+      setCodingTaskHistory(payload.codingTaskHistory);
+      setQuizHistory(payload.quizHistory);
+    };
 
     socket.addEventListener("message", (event) => {
       const data = JSON.parse(event.data) as RoomMessage;
@@ -134,14 +160,12 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
         }
         case "coding-task":
           setCodingTask(data.task);
-          setActiveQuiz(null);
           break;
         case "quiz-start":
           setActiveQuiz(data.quiz);
-          setCodingTask(null);
-          setQuizAnswers([]);
-          setQuizCandidateStarted(false);
-          setQuizSubmission(null);
+          break;
+        case "assignment-state":
+          applyAssignmentState(data);
           break;
         case "quiz-candidate-started":
           setQuizCandidateStarted(true);
@@ -256,11 +280,16 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             setPhase(nextPhase);
           }
           setConfig(data.state.config);
-          setCodingTask(data.state.codingTask);
-          setActiveQuiz(data.state.activeQuiz ?? null);
-          setQuizAnswers((data.state.quizAnswers ?? []) as QuizAnswerEntry[]);
-          setQuizCandidateStarted(Boolean(data.state.quizCandidateStarted));
-          setQuizSubmission((data.state.quizSubmission as QuizSubmission | null) ?? null);
+          applyAssignmentState({
+            activeAssignment: data.state.activeAssignment ?? "none",
+            codingTask: data.state.codingTask,
+            activeQuiz: data.state.activeQuiz ?? null,
+            quizAnswers: data.state.quizAnswers ?? [],
+            quizCandidateStarted: Boolean(data.state.quizCandidateStarted),
+            quizSubmission: data.state.quizSubmission ?? null,
+            codingTaskHistory: data.state.codingTaskHistory ?? [],
+            quizHistory: data.state.quizHistory ?? [],
+          });
           setHostParticipantId(data.state.hostParticipantId);
           setInterviewStartedAt(
             typeof data.state.interviewStartedAt === "number" ? data.state.interviewStartedAt : null
@@ -336,6 +365,18 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const sendQuizStart = useCallback((quiz: unknown) => {
     if (!socketRef.current) return;
     socketRef.current.send(JSON.stringify({ type: "quiz-start", quiz } satisfies RoomMessage));
+  }, []);
+
+  const sendActivateCodingTask = useCallback((collaborationTaskId: string) => {
+    if (!socketRef.current) return;
+    socketRef.current.send(
+      JSON.stringify({ type: "activate-coding-task", collaborationTaskId } satisfies RoomMessage)
+    );
+  }, []);
+
+  const sendActivateQuiz = useCallback((quizId: string) => {
+    if (!socketRef.current) return;
+    socketRef.current.send(JSON.stringify({ type: "activate-quiz", quizId } satisfies RoomMessage));
   }, []);
 
   const sendQuizAnswer = useCallback((answer: QuizAnswerEntry) => {
@@ -419,7 +460,10 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     phase,
     config,
     codingTask,
+    codingTaskHistory,
     activeQuiz,
+    quizHistory,
+    activeAssignment,
     quizAnswers,
     quizCandidateStarted,
     quizSubmission,
@@ -433,7 +477,9 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     sendConfig,
     sendPhase,
     sendCodingTask,
+    sendActivateCodingTask,
     sendQuizStart,
+    sendActivateQuiz,
     sendQuizAnswer,
     sendQuizCandidateStarted,
     sendQuizComplete,
