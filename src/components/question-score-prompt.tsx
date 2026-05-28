@@ -45,7 +45,15 @@ export function QuestionScorePrompt({
           </div>
           <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed line-clamp-3">{question}</p>
         </div>
-        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={onDismiss} title="Dismiss">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 shrink-0"
+          onClick={onDismiss}
+          title="Dismiss"
+          aria-label="Dismiss rating"
+        >
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>

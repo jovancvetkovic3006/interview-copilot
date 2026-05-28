@@ -41,6 +41,12 @@ import {
 } from "@/lib/question-scoring";
 import { buildLiveQuizAgentContext } from "@/lib/quiz-summary";
 import {
+  buildRoomInviteUrl as buildRoomInviteUrlFromOrigin,
+  formatRemainingMs,
+  inviteRoleLabel,
+} from "@/lib/room-invite";
+import { resolveActiveStep, sessionIsLive, type RoomUiStep } from "@/lib/room-step";
+import {
   Users,
   Wifi,
   WifiOff,
@@ -99,30 +105,12 @@ function getOrCreateParticipantId(roomCode: string, role: Participant["role"]): 
   return id;
 }
 
-/** Build invite URL: interviewer link is role-aware, candidate link is neutral. */
 function buildRoomInviteUrl(roomCode: string, role: Participant["role"]): string {
   if (typeof window === "undefined") return "";
-  const base = window.location.origin;
-  if (role === "interviewer") return `${base}/interview/${roomCode}`;
-  return `${base}/invite/${roomCode}`;
+  return buildRoomInviteUrlFromOrigin(window.location.origin, roomCode, role);
 }
 
-function inviteRoleLabel(role: Participant["role"]): string {
-  if (role === "interviewer") return "Interviewer (host)";
-  return "Candidate";
-}
-
-/** Format milliseconds as `H:MM:SS` or `M:SS` for the interview countdown. */
-function formatRemainingMs(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-  return `${m}:${String(sec).padStart(2, "0")}`;
-}
-
-type Step = "join" | "setup" | "interview" | "review";
+type Step = RoomUiStep;
 type InviteCopyKind = "candidate" | "interviewer";
 
 export interface RoomPageClientProps {
@@ -476,29 +464,23 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [inviteDropdownOpen]);
 
-  // PartyKit phase is the source of truth once the session has started.
-  const sessionIsLive =
-    phase === "interview" ||
-    phase === "review" ||
-    interviewStartedAt != null ||
-    sharedConfig != null ||
-    codingTask != null ||
-    activeQuiz != null ||
-    codingTaskHistory.length > 0 ||
-    quizHistory.length > 0;
+  const live = sessionIsLive({
+    phase,
+    interviewStartedAt,
+    hasConfig: sharedConfig != null,
+    hasCodingTask: codingTask != null,
+    hasActiveQuiz: activeQuiz != null,
+    codingTaskHistoryCount: codingTaskHistory.length,
+    quizHistoryCount: quizHistory.length,
+  });
 
-  const activeStep: Step =
-    phase === "review"
-      ? "review"
-      : phase === "interview" || (sessionIsLive && step !== "join")
-        ? "interview"
-        : step;
+  const activeStep = resolveActiveStep(phase, step, live);
 
   useEffect(() => {
-    if (sessionIsLive && step === "setup") {
+    if (live && step === "setup") {
       setStep("interview");
     }
-  }, [sessionIsLive, step]);
+  }, [live, step]);
 
   // Background speech analysis: only the designated host triggers the API (avoids duplicate calls per interviewer).
   // Other interviewers still receive `transcript-analysis` over PartyKit and see the same panel.

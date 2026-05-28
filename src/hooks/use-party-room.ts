@@ -4,6 +4,11 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import PartySocket from "partysocket";
 import { nextTimeExtensionMinutes, interviewDurationMinutes } from "@/lib/interview-deadline";
 import { upsertQuestionScoreEntry } from "@/lib/question-scoring";
+import {
+  filterChatMessagesForRole,
+  resolveIncomingSyncPhase,
+  shouldIgnoreSyncPhaseDowngrade,
+} from "@/lib/room-sync";
 import { transcriptionTrace } from "@/lib/transcription-trace";
 import type {
   Participant,
@@ -21,28 +26,6 @@ import type {
 import type { QuizAnswerEntry, QuizSubmission } from "@/types/quiz";
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999";
-
-/** True when PartyKit state clearly belongs to a session that has started (not pre-setup waiting). */
-function syncStateIndicatesLiveSession(s: {
-  phase?: string;
-  interviewStartedAt?: number | null;
-  config?: unknown | null;
-  codingTask?: unknown | null;
-  activeQuiz?: unknown | null;
-  codingTaskHistory?: unknown[];
-  quizHistory?: unknown[];
-}): boolean {
-  return (
-    s.phase === "interview" ||
-    s.phase === "review" ||
-    s.interviewStartedAt != null ||
-    s.config != null ||
-    s.codingTask != null ||
-    s.activeQuiz != null ||
-    (s.codingTaskHistory?.length ?? 0) > 0 ||
-    (s.quizHistory?.length ?? 0) > 0
-  );
-}
 
 export function usePartyRoom(roomId: string | null, participant: Participant | null) {
   const socketRef = useRef<PartySocket | null>(null);
@@ -273,9 +256,11 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           // Never downgrade an in-progress interview back to setup via reconnect sync.
           // (PartyKit can briefly return a cold/empty snapshot; applying it caused "Waiting to start".)
           if (
-            interviewSeenRef.current &&
-            (localPhase === "interview" || localPhase === "review") &&
-            incomingPhase === "setup"
+            shouldIgnoreSyncPhaseDowngrade({
+              interviewSeen: interviewSeenRef.current,
+              localPhase,
+              incomingPhase,
+            })
           ) {
             transcriptionTrace("socket ← sync-response ignored phase downgrade", {
               localPhase,
@@ -310,16 +295,15 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             host: data.state.hostParticipantId,
           });
           setParticipants(data.state.participants);
-          setMessages(data.state.messages.filter((m) =>
-            participantRoleRef.current === "candidate" ? m.role !== "agent" : true
-          ));
+          setMessages(
+            filterChatMessagesForRole(data.state.messages, participantRoleRef.current)
+          );
           if (participantRoleRef.current !== "candidate") {
             setTranscript(data.state.transcript);
           }
           {
-            let nextPhase = incomingPhase;
-            if (incomingPhase === "setup" && syncStateIndicatesLiveSession(s)) {
-              nextPhase = "interview";
+            const nextPhase = resolveIncomingSyncPhase(incomingPhase, s);
+            if (nextPhase !== incomingPhase) {
               transcriptionTrace("sync-response coerced setup → interview", {
                 interviewStartedAt: s.interviewStartedAt,
                 hasConfig: Boolean(s.config),

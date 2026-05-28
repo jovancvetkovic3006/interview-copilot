@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { formatManualQuestionScoresPromptSection } from "@/lib/chat-prompt-sections";
 import { formatLiveQuizForPrompt, type LiveQuizAgentContext } from "@/lib/quiz-summary";
 
 // Model fallback chain — tries each model in order until one works
@@ -160,19 +161,7 @@ ${config.transcriptInsights
   }
 
   if (config.recentQuestionScores && config.recentQuestionScores.length > 0) {
-    prompt += `
-
-MANUAL QUESTION SCORES (interviewer-rated 1–10 after asking questions — authoritative; use for follow-ups):
-${config.recentQuestionScores
-  .map(
-    (s, idx) =>
-      `${idx + 1}. [${s.score}/10${s.scoreLabel ? ` ${s.scoreLabel}` : ""}]${s.category ? ` [${s.category}]` : ""} ${s.question}${
-        s.scoredAt ? ` (scored ${new Date(s.scoredAt).toISOString()})` : ""
-      }`
-  )
-  .join("\n")}
-
-When scores are present: reference them when suggesting next questions — probe weak scores (≤5) deeply, validate strong ones (≥8) with harder variants, and avoid repeating topics already rated highly unless checking depth.`;
+    prompt += formatManualQuestionScoresPromptSection(config.recentQuestionScores);
   }
 
   let quizReviewBehaviorHint = "";
