@@ -30,12 +30,9 @@ import { InterviewReviewPanel } from "@/components/interview-review";
 import { AgentMessage } from "@/components/agent-message";
 import { CvSuggestionsPanel } from "@/components/cv-suggestions-panel";
 import { LiveQuizPanel } from "@/components/live-quiz-panel";
+import { QuizResultsSummary } from "@/components/quiz-results-summary";
 import { QuestionScorePrompt } from "@/components/question-score-prompt";
 import { scoreLevelLabel } from "@/lib/question-scoring";
-import {
-  hasUsableTranscript,
-  MIN_INTERVIEWER_SESSION_NOTES_CHARS,
-} from "@/lib/interview-report-gate";
 import {
   Users,
   Wifi,
@@ -61,6 +58,15 @@ const TRANSCRIPT_ANALYSIS_DEBOUNCE_MS = 4000;
 const TRANSCRIPT_ANALYSIS_MIN_CHARS = 28;
 const TRANSCRIPT_ANALYSIS_GATE_CHARS = 40;
 const TRANSCRIPT_ANALYSIS_GATE_LINES = 2;
+const MIN_FINAL_NOTES_CHARS_HINT = 30;
+
+/** BCP-47 tag for Web Speech API — browser locale first, then English. */
+function resolveSpeechRecognitionLanguage(): string {
+  if (typeof navigator !== "undefined" && navigator.language?.trim()) {
+    return navigator.language.trim();
+  }
+  return "en-US";
+}
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -139,7 +145,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     questionId?: string;
     category?: string;
   } | null>(null);
-  const sessionNotesStorageKey = `ic-session-review-notes-${roomCode}`;
+  const finalNotesStorageKey = `ic-final-review-notes-${roomCode}`;
   const [sessionReviewNotes, setSessionReviewNotes] = useState("");
 
   useEffect(() => {
@@ -147,7 +153,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     queueMicrotask(() => {
       if (cancelled) return;
       try {
-        setSessionReviewNotes(sessionStorage.getItem(sessionNotesStorageKey) ?? "");
+        setSessionReviewNotes(sessionStorage.getItem(finalNotesStorageKey) ?? "");
       } catch {
         setSessionReviewNotes("");
       }
@@ -155,27 +161,23 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     return () => {
       cancelled = true;
     };
-  }, [sessionNotesStorageKey]);
+  }, [finalNotesStorageKey]);
 
   const setSessionReviewNotesPersisted = useCallback(
     (v: string) => {
       setSessionReviewNotes(v);
       try {
-        sessionStorage.setItem(sessionNotesStorageKey, v);
+        sessionStorage.setItem(finalNotesStorageKey, v);
       } catch {
         /* ignore quota / private mode */
       }
     },
-    [sessionNotesStorageKey]
+    [finalNotesStorageKey]
   );
-  /** Per-follow-up "copied!" feedback keyed by `${analysisId}::${questionIdx}`. */
-  const [copiedFollowUpKey, setCopiedFollowUpKey] = useState<string | null>(null);
-  const copiedFollowUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Sidebar search filters (interviewer-only side panel). */
   const [panelQuestionsQuery, setPanelQuestionsQuery] = useState("");
   const [panelTasksQuery, setPanelTasksQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const greetingSentRef = useRef(false);
 
   /** Shared panel editor (interviewer view) — read Yjs text for AI code review. */
   const panelCodingEditorRef = useRef<CollaborativeEditorHandle>(null);
@@ -197,6 +199,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     codingTask,
     activeQuiz,
     quizAnswers,
+    quizCandidateStarted,
+    quizSubmission,
     questionScores,
     interviewReport,
     interviewStartedAt,
@@ -211,6 +215,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     sendCodingTask,
     sendQuizStart,
     sendQuizAnswer,
+    sendQuizCandidateStarted,
+    sendQuizComplete,
     sendQuestionScore,
     sendTimeExtension,
     sendInterviewReport,
@@ -284,8 +290,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const scheduleExpired =
     Boolean(deadlineMs != null && remainingMs === 0 && phase === "interview");
 
-  const reportNeedsSessionNotes = !hasUsableTranscript(transcript);
-
   const resolveAgentApiConfig = useCallback(
     (cfg: InterviewConfig | null) => {
       const candidateName =
@@ -328,10 +332,31 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               })),
             }
           : {}),
+        ...(transcriptAnalyses.length
+          ? {
+              transcriptInsights: transcriptAnalyses.slice(-8).map((a) => ({
+                summary: a.summary,
+                answerQuality: a.answerQuality,
+                score: a.score,
+                ...(a.followUpQuestions?.length
+                  ? { followUpQuestions: a.followUpQuestions.slice(0, 3) }
+                  : {}),
+              })),
+            }
+          : {}),
+        ...(questionScores.length
+          ? {
+              recentQuestionScores: questionScores.slice(-10).map((s) => ({
+                question: s.question,
+                score: s.score,
+                ...(s.category ? { category: s.category } : {}),
+              })),
+            }
+          : {}),
         collaborativeRoom: true as const,
       };
     },
-    [participants, participant?.name]
+    [participants, participant?.name, transcriptAnalyses, questionScores]
   );
 
   const [analysisBusy, setAnalysisBusy] = useState(false);
@@ -341,21 +366,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const analyzeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const analyzeInFlightRef = useRef(false);
 
-  /**
-   * Voice-to-chat bridge state (candidate role only).
-   *
-   * The Web Speech API hook closes over the `onTranscript` callback once on `startRecording`,
-   * so any state read inside the bridge has to come from a ref to avoid stale-closure bugs.
-   *
-   * - `voiceUtteranceBufRef`: accumulates the candidate's final STT segments since the last flush
-   * - `voiceFlushTimerRef`: 2.5s debounce timer reset on each new segment (silence → flush)
-   * - `voiceFlushInFlightRef`: prevents two parallel agent calls from the bridge
-   * - `agentTypingRef` / `roomConfigLiveRef` / `participantLiveRef`: latest values for the closure
-   */
-  const voiceUtteranceBufRef = useRef("");
-  const voiceFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const voiceFlushInFlightRef = useRef(false);
-  const agentTypingRef = useRef(false);
+  /** Refs for async callbacks that should always read latest values. */
   const roomConfigLiveRef = useRef<InterviewConfig | null>(null);
   const participantLiveRef = useRef<Participant | null>(null);
 
@@ -365,22 +376,12 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   }, [transcript, messages]);
 
   useEffect(() => {
-    agentTypingRef.current = agentTyping;
-  }, [agentTyping]);
-
-  useEffect(() => {
     roomConfigLiveRef.current = roomConfig;
   }, [roomConfig]);
 
   useEffect(() => {
     participantLiveRef.current = participant;
   }, [participant]);
-
-  useEffect(() => {
-    return () => {
-      if (copiedFollowUpTimerRef.current) clearTimeout(copiedFollowUpTimerRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     lastAnalyzedTranscriptLenRef.current = 0;
@@ -400,13 +401,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [inviteDropdownOpen]);
 
-  // PartyKit phase wins for interview/review; skip setup when interview already started.
+  // PartyKit phase is the source of truth once the session has started.
   const activeStep: Step =
-    phase === "review"
-      ? "review"
-      : step === "setup" && phase === "interview"
-        ? "interview"
-        : step;
+    phase === "review" ? "review" : phase === "interview" ? "interview" : step;
+
+  useEffect(() => {
+    if (phase === "interview" && step === "setup") {
+      setStep("interview");
+    }
+  }, [phase, step]);
 
   // Background speech analysis: only the designated host triggers the API (avoids duplicate calls per interviewer).
   // Other interviewers still receive `transcript-analysis` over PartyKit and see the same panel.
@@ -511,64 +514,38 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     };
   }, [transcript, messages, roomConfig, participants, activeStep, participant, isHost, sendTranscriptAnalysis]);
 
-  /**
-   * Voice→chat bridge: flush the candidate's accumulated final STT segments into chat as a
-   * single message tagged `spoken: true`, then call `/api/chat` so the AI agent reacts as if
-   * the candidate had typed it. This is what unifies "two AI agents" into one conversation —
-   * the chat agent now sees verbal answers natively, and the transcript analyzer keeps its
-   * narrower role as the private interviewer hint side-channel.
-   *
-   * Re-schedules itself (via `flushRef.current`) if the agent is currently typing so we don't
-   * fire two parallel calls. Reads all live state from refs so the speech hook's stale
-   * `onTranscript` closure stays correct.
-   */
-  const flushRef = useRef<() => void>(() => {});
-  const flushCandidateUtterance = useCallback(() => {
-    const buf = voiceUtteranceBufRef.current.trim();
-    // Skip very short utterances (spurious mic noise, "uh huh", etc.) — keep the chat clean.
-    if (buf.length < 6) {
-      voiceUtteranceBufRef.current = "";
-      return;
-    }
-    if (voiceFlushInFlightRef.current || agentTypingRef.current) {
-      // Agent is busy — try again shortly. Don't drop the buffer. Ref-indirected so we don't
-      // self-reference the useCallback (lint: react-hooks/immutability).
-      if (voiceFlushTimerRef.current) clearTimeout(voiceFlushTimerRef.current);
-      voiceFlushTimerRef.current = setTimeout(() => flushRef.current(), 1500);
-      return;
-    }
-    const p = participantLiveRef.current;
-    if (!p || p.role !== "candidate") {
-      voiceUtteranceBufRef.current = "";
-      return;
-    }
-    voiceUtteranceBufRef.current = "";
-    voiceFlushInFlightRef.current = true;
+  const lastProactiveAnalysisIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeStep !== "interview") return;
+    if (!participant || participant.role !== "interviewer") return;
+    const latest = transcriptAnalyses[transcriptAnalyses.length - 1];
+    if (!latest?.id) return;
+    if (lastProactiveAnalysisIdRef.current === latest.id) return;
+    lastProactiveAnalysisIdRef.current = latest.id;
 
-    const msg = {
+    const contextMsg = {
       id: `msg-${Date.now()}`,
       role: "user" as const,
-      content: buf,
-      senderName: p.name,
+      content:
+        "Provide me the next best question(s) based on the newest transcript insight and explain what signal to look for in the answer.",
+      senderName: participant.name,
       timestamp: Date.now(),
-      spoken: true as const,
     };
-    sendChat(msg);
 
     setAgentTyping(true);
     void (async () => {
       try {
-        const cfg = roomConfigLiveRef.current;
-        const history = messagesLiveRef.current;
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: [...history, msg].map((m) => ({
-              role: m.role === "agent" ? "agent" : "candidate",
+            messages: [...messagesLiveRef.current, contextMsg].map((m) => ({
+              role: m.role === "agent" ? "agent" : "interviewer",
               content: m.content,
             })),
-            config: resolveAgentApiConfig(cfg),
+            config: resolveAgentApiConfig(roomConfigLiveRef.current),
+            promptHint:
+              "Be proactive. Suggest 2-4 concise next questions, plus brief scoring hints for interviewer.",
           }),
         });
         const text = await res.text();
@@ -577,52 +554,27 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           if (data.content) sendAgentResponse(data.content);
         }
       } catch (err) {
-        console.error("Voice→chat agent error:", err);
+        console.error("Proactive assistant error:", err);
       } finally {
-        voiceFlushInFlightRef.current = false;
         setAgentTyping(false);
       }
     })();
-  }, [resolveAgentApiConfig, sendAgentResponse, sendChat]);
-  useEffect(() => {
-    flushRef.current = flushCandidateUtterance;
-  }, [flushCandidateUtterance]);
+  }, [activeStep, participant, transcriptAnalyses, resolveAgentApiConfig, sendAgentResponse]);
 
   const handleTranscriptSegment = useCallback(
     (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
       const p = participantLiveRef.current;
-      if (p) {
-        sendTranscript(text, p.name);
-      }
-      // Only the candidate's voice flows into the chat agent. Interviewer speech stays in the
-      // transcript and feeds the interviewer-only insights side-panel.
-      if (!p || p.role !== "candidate") return;
-      voiceUtteranceBufRef.current = (voiceUtteranceBufRef.current + " " + text).trim();
-      if (voiceFlushTimerRef.current) clearTimeout(voiceFlushTimerRef.current);
-      // Wait ~2.5s of silence before flushing so multi-sentence answers stay together as a
-      // single chat turn instead of triggering the agent on every clause. Ref-indirected so
-      // this callback does not depend on `flushCandidateUtterance` (keeps the speech hook's
-      // captured `onTranscript` aligned with the latest flush logic via `flushRef`).
-      voiceFlushTimerRef.current = setTimeout(() => flushRef.current(), 2500);
+      const speaker =
+        p?.name?.trim() ||
+        (inviteRole === "candidate" ? "Candidate" : "Interviewer");
+      sendTranscript(trimmed, speaker);
     },
-    [sendTranscript]
+    [sendTranscript, inviteRole]
   );
 
-  // Cancel any pending voice flush when leaving the interview phase / unmounting so we don't
-  // post stale spoken messages into the review screen.
-  useEffect(() => {
-    if (phase === "interview") return;
-    if (voiceFlushTimerRef.current) {
-      clearTimeout(voiceFlushTimerRef.current);
-      voiceFlushTimerRef.current = null;
-    }
-    voiceUtteranceBufRef.current = "";
-  }, [phase]);
-  useEffect(() => {
-    return () => {
-      if (voiceFlushTimerRef.current) clearTimeout(voiceFlushTimerRef.current);
-    };
-  }, []);
+  const speechLanguage = useMemo(() => resolveSpeechRecognitionLanguage(), []);
 
   const {
     isRecording,
@@ -631,7 +583,18 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     interimText,
     startRecording,
     stopRecording,
-  } = useSpeechTranscription({ onTranscript: handleTranscriptSegment });
+  } = useSpeechTranscription({
+    onTranscript: handleTranscriptSegment,
+    language: speechLanguage,
+  });
+
+  const candidateSpeakerNames = useMemo(
+    () =>
+      new Set(
+        participants.filter((p) => p.role === "candidate").map((p) => p.name)
+      ),
+    [participants]
+  );
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -679,31 +642,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       });
     }
 
-    if (!greetingSentRef.current) {
-      greetingSentRef.current = true;
-      try {
-        setAgentTyping(true);
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [{ role: "candidate", content: "[Interview session started. Please introduce yourself and begin the interview.]" }],
-            config: resolveAgentApiConfig(config),
-          }),
-        });
-        const text = await res.text();
-        if (text) {
-          const data = JSON.parse(text);
-          if (data.content) {
-            sendAgentResponse(data.content);
-          }
-        }
-      } catch (err) {
-        console.error("Greeting error:", err);
-      } finally {
-        setAgentTyping(false);
-      }
-    }
+    // Assistant is private to the interviewer; no auto-greeting message is sent on start.
   };
 
   const handleSendMessage = async () => {
@@ -729,7 +668,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [...messages, msg].map((m) => ({
-            role: m.role === "agent" ? "agent" : "candidate",
+            role: m.role === "agent" ? "agent" : "interviewer",
             content: m.content,
           })),
           config: resolveAgentApiConfig(cfg),
@@ -773,7 +712,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [...messages, msg].map((m) => ({
-            role: m.role === "agent" ? "agent" : "candidate",
+            role: m.role === "agent" ? "agent" : "interviewer",
             content: m.content,
           })),
           config: resolveAgentApiConfig(roomConfig),
@@ -988,12 +927,12 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [...messagesLiveRef.current, msg].map((m) => ({
-              role: m.role === "agent" ? "agent" : "candidate",
+              role: m.role === "agent" ? "agent" : "interviewer",
               content: m.content,
             })),
             config: resolveAgentApiConfig(roomConfigLiveRef.current),
             promptHint:
-              "The interviewer just asked a question. After your response, remind them to rate the candidate's answer using the 5-level score prompt (Excellent / Good / Adequate / Weak / Not answering).",
+              "The interviewer just asked a question. After your response, remind them to rate the candidate's answer using the 10-level score prompt.",
           }),
         });
         const text = await res.text();
@@ -1022,15 +961,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
 
   const runReportGeneration = useCallback(async (notesOverride?: string) => {
     const effectiveNotes = (notesOverride ?? sessionReviewNotes).trim();
-    if (
-      reportNeedsSessionNotes &&
-      effectiveNotes.length < MIN_INTERVIEWER_SESSION_NOTES_CHARS
-    ) {
-      window.alert(
-        `No live transcript was captured. Add session notes for the final report (at least ${MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters) — what you discussed and your impressions — then try again.`
-      );
-      return;
-    }
     setReportGenerating(true);
     try {
       // Snapshot the live shared editor so the report sees the candidate's actual final code
@@ -1061,6 +991,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           questionScores,
           quizAnswers,
           activeQuiz,
+          quizSubmission,
         }),
       });
       const data = (await res.json()) as { error?: string; markdown?: string };
@@ -1082,11 +1013,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       setReportGenerating(false);
     }
   }, [
-    reportNeedsSessionNotes,
     sessionReviewNotes,
     questionScores,
     quizAnswers,
     activeQuiz,
+    quizSubmission,
     roomCode,
     participants,
     messages,
@@ -1106,15 +1037,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const confirmEndInterview = useCallback(async () => {
     setEndInterviewModalOpen(false);
     setSessionReviewNotesPersisted(endInterviewNotes);
-    if (
-      reportNeedsSessionNotes &&
-      endInterviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS
-    ) {
-      window.alert(
-        `No live transcript was captured. Add final notes for the report (at least ${MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters).`
-      );
-      return;
-    }
     if (isRecording) stopRecording();
     sendPhase("review");
     setStep("review");
@@ -1123,7 +1045,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   }, [
     endInterviewNotes,
     setSessionReviewNotesPersisted,
-    reportNeedsSessionNotes,
     isRecording,
     stopRecording,
     sendPhase,
@@ -1274,11 +1195,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             ? {
                 value: sessionReviewNotes,
                 onChange: setSessionReviewNotesPersisted,
-                minLength: MIN_INTERVIEWER_SESSION_NOTES_CHARS,
-                // When a transcript was captured, notes are accepted as additive evidence with
-                // no min-length gate. Otherwise we still require enough notes to ground the
-                // report (the API enforces the same threshold server-side).
-                optional: !reportNeedsSessionNotes,
+                minLength: MIN_FINAL_NOTES_CHARS_HINT,
+                optional: true,
               }
             : undefined
         }
@@ -1356,15 +1274,28 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             Scheduled time has ended. Please wait — the host can add more time or end the interview to generate the review.
           </div>
         )}
+        {phase === "interview" && !isRecording && speechSupported && (
+          <div className="px-4 py-2 text-center text-sm bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 border-b border-blue-200 dark:border-blue-900/50">
+            Tap <strong>Record</strong> so the interviewer can see your spoken answers in the live transcript.
+          </div>
+        )}
 
         <div className="flex-1 flex overflow-hidden min-h-0">
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {hasQuiz && liveQuiz ? (
             <LiveQuizPanel
               quiz={liveQuiz}
               participantName={participant?.name || "Candidate"}
               existingAnswers={quizAnswers}
               onAnswer={sendQuizAnswer}
-              onComplete={() => {}}
+              onStart={sendQuizCandidateStarted}
+              onComplete={(answers) =>
+                sendQuizComplete({
+                  answers,
+                  submittedAt: Date.now(),
+                  candidateName: participant?.name,
+                })
+              }
             />
           ) : hasCodingTask ? (
             <CollaborativeEditor
@@ -1388,24 +1319,37 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
               <MessageSquare className="h-10 w-10 text-zinc-300 mb-3" />
               <p className="text-sm text-zinc-500 max-w-sm">
-                Waiting for the interviewer to assign a coding task or quiz. Use the Record button above if you need to speak your answers.
+                Waiting for the interviewer to assign a coding task or quiz. Use the Record above when you speak your answers.
               </p>
-              {(transcript.length > 0 || interimText) && (
-                <div className="mt-6 max-w-md w-full text-left rounded-lg border border-zinc-200 dark:border-zinc-800 p-3 text-xs text-zinc-600 dark:text-zinc-400 max-h-40 overflow-y-auto">
-                  {transcript.slice(-10).map((entry, i) => (
-                    <div key={`${entry.timestamp}-${i}`}>
-                      <span className="font-medium">{entry.speaker}:</span> {entry.text}
-                    </div>
-                  ))}
-                  {interimText && (
-                    <div className="text-zinc-400 italic">
-                      <span className="font-medium">{participant?.name}:</span> {interimText}…
-                    </div>
-                  )}
+            </div>
+          )}
+          </div>
+
+          <div className="w-72 shrink-0 flex flex-col border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 min-h-0">
+            <div className="px-3 py-2 flex items-center gap-1.5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+              <Mic className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`} />
+              <span className="text-xs font-medium">Live transcript</span>
+              {isRecording && <span className="text-[10px] text-red-500">● REC</span>}
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+              {transcript.length === 0 && !interimText ? (
+                <p className="text-zinc-400 italic leading-relaxed">
+                  Your speech is shared with the interviewer after you tap Record.
+                </p>
+              ) : (
+                transcript.slice(-40).map((entry, i) => (
+                  <div key={`${entry.timestamp}-${i}-${entry.text.slice(0, 12)}`}>
+                    <span className="font-medium">{entry.speaker}:</span> {entry.text}
+                  </div>
+                ))
+              )}
+              {interimText && (
+                <div className="text-zinc-400 italic">
+                  <span className="font-medium">{participant?.name}:</span> {interimText}…
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     );
@@ -1431,12 +1375,9 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                 placeholder="Strengths, concerns, topics covered, recommendation hints…"
                 className="w-full text-sm rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2"
               />
-              {reportNeedsSessionNotes &&
-                endInterviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS && (
-                  <p className="text-xs text-amber-700">
-                    Need at least {MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters (no live transcript).
-                  </p>
-                )}
+              <p className="text-xs text-zinc-500">
+                Optional. For better report quality, include at least {MIN_FINAL_NOTES_CHARS_HINT} characters.
+              </p>
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setEndInterviewModalOpen(false)}>
                   Cancel
@@ -1612,17 +1553,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               size="sm"
               className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50"
               onClick={handleEndInterview}
-              disabled={
-                reportGenerating ||
-                (reportNeedsSessionNotes &&
-                  sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS)
-              }
-              title={
-                reportNeedsSessionNotes &&
-                sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS
-                  ? `Add session notes (at least ${MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters) — no live transcript was captured`
-                  : "End interview and generate AI summary for everyone"
-              }
+              disabled={reportGenerating}
+              title="End interview and generate AI summary for everyone"
             >
               <StopCircle className="h-3.5 w-3.5" />
               End interview
@@ -1655,40 +1587,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         </div>
       </div>
 
-      {isHost && phase === "interview" && (
-        <div className="shrink-0 border-b border-amber-200/80 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 px-4 py-2">
-          <label className="text-xs font-medium text-amber-950 dark:text-amber-100 block mb-1">
-            Session notes for final AI report
-            {reportNeedsSessionNotes ? (
-              <span className="font-normal text-amber-900/90 dark:text-amber-200/90">
-                {" "}
-                — required (no live transcript). Min. {MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters.
-              </span>
-            ) : (
-              <span className="font-normal text-zinc-600 dark:text-zinc-400">
-                {" "}
-                — optional. Used as primary evidence alongside the live transcript (neither replaces the other).
-              </span>
-            )}
-          </label>
-          <textarea
-            value={sessionReviewNotes}
-            onChange={(e) => setSessionReviewNotesPersisted(e.target.value)}
-            placeholder="E.g. topics covered, how the candidate handled system design, off-mic discussion, concerns, strengths…"
-            rows={3}
-            className="w-full text-xs rounded-md border border-amber-200/90 dark:border-amber-800/80 bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/40 max-h-32"
-          />
-          {reportNeedsSessionNotes &&
-            sessionReviewNotes.trim().length < MIN_INTERVIEWER_SESSION_NOTES_CHARS && (
-              <p className="text-[10px] text-amber-800 dark:text-amber-300 mt-1">
-                Need at least{" "}
-                {MIN_INTERVIEWER_SESSION_NOTES_CHARS - sessionReviewNotes.trim().length} more
-                characters before you can end the interview and generate the report.
-              </p>
-            )}
-        </div>
-      )}
-
       <div className="flex-1 flex overflow-hidden min-h-0">
         <div className="w-95 min-w-80 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0">
           <div className="flex-none flex flex-col border-b border-zinc-200 dark:border-zinc-800 max-h-[30vh] min-h-[112px] shrink-0 bg-zinc-50/80 dark:bg-zinc-900/40">
@@ -1701,14 +1599,22 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             <div className="flex-1 min-h-[72px] max-h-[26vh] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
               {transcript.length === 0 && !interimText ? (
                 <p className="text-zinc-400 italic leading-relaxed">
-                  Final lines appear here as people record. Interim text updates while someone is speaking.
+                  Candidate answers appear here after they tap <strong>Record</strong> on their interview page (each person captures their own mic). Your speech appears when you record here.
                 </p>
               ) : (
-                transcript.slice(-30).map((entry, i) => (
-                  <div key={`${entry.timestamp}-${i}-${entry.text.slice(0, 12)}`}>
-                    <span className="font-medium">{entry.speaker}:</span> {entry.text}
-                  </div>
-                ))
+                transcript.slice(-30).map((entry, i) => {
+                  const isCandidateLine =
+                    candidateSpeakerNames.has(entry.speaker) ||
+                    entry.speaker === "Candidate";
+                  return (
+                    <div
+                      key={`${entry.timestamp}-${i}-${entry.text.slice(0, 12)}`}
+                      className={isCandidateLine ? "text-blue-800 dark:text-blue-200" : undefined}
+                    >
+                      <span className="font-medium">{entry.speaker}:</span> {entry.text}
+                    </div>
+                  );
+                })
               )}
               {interimText && (
                 <div className="text-zinc-400 italic">
@@ -1730,7 +1636,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             <div className="flex-1 min-h-[72px] max-h-[28vh] overflow-y-auto p-3 space-y-2">
               {transcriptAnalyses.length === 0 && !analysisBusy ? (
                 <p className="text-xs text-violet-800/75 dark:text-violet-200/75 italic leading-relaxed">
-                  When the host records, recent speech is analyzed here (summary, score, answer quality, plus suggested follow-up questions) to help you steer the interview.
+                  When the candidate records (or anyone adds speech to the shared transcript), the host&apos;s client analyzes recent lines here — summary, score, answer quality, and follow-up ideas.
                 </p>
               ) : (
                 transcriptAnalyses.slice(-8).map((a) => (
@@ -1759,37 +1665,18 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                         <ul className="space-y-1">
                           {a.followUpQuestions.map((q, i) => {
                             const key = `${a.id}::${i}`;
-                            const copied = copiedFollowUpKey === key;
                             return (
                               <li key={key}>
                                 <button
                                   type="button"
-                                  onClick={async () => {
-                                    try {
-                                      await navigator.clipboard.writeText(q);
-                                      if (copiedFollowUpTimerRef.current) {
-                                        clearTimeout(copiedFollowUpTimerRef.current);
-                                      }
-                                      setCopiedFollowUpKey(key);
-                                      copiedFollowUpTimerRef.current = setTimeout(
-                                        () => setCopiedFollowUpKey(null),
-                                        1500
-                                      );
-                                    } catch {
-                                      /* clipboard API unavailable — silent */
-                                    }
-                                  }}
+                                  onClick={() => void handleSendQuestion(q, { category: "follow-up" })}
                                   className="group w-full text-left flex items-start gap-1.5 rounded px-1.5 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors"
-                                  title="Click to copy this follow-up question"
+                                  title="Ask this follow-up via assistant"
                                 >
                                   <span className="flex-1 text-zinc-700 dark:text-zinc-200 leading-snug">
                                     {q}
                                   </span>
-                                  {copied ? (
-                                    <Check className="h-3 w-3 mt-0.5 shrink-0 text-green-600" />
-                                  ) : (
-                                    <Copy className="h-3 w-3 mt-0.5 shrink-0 text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  )}
+                                  <Send className="h-3 w-3 mt-0.5 shrink-0 text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </button>
                               </li>
                             );
@@ -1902,7 +1789,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       </p>
                       {questionScores.slice(-5).map((s) => (
                         <div key={s.id} className="text-[10px] rounded border border-indigo-200/80 dark:border-indigo-900/60 px-2 py-1.5 bg-white/80 dark:bg-zinc-900/80">
-                          <span className="font-medium">{s.score}/5</span> — {scoreLevelLabel(s.score)}
+                          <span className="font-medium">{s.score}/10</span> — {scoreLevelLabel(s.score)}
                           <p className="text-zinc-600 dark:text-zinc-400 line-clamp-2 mt-0.5">{s.question}</p>
                         </div>
                       ))}
@@ -2223,6 +2110,25 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
                       </div>
                     </div>
                   ))}
+                  {(activeQuiz as ActiveQuiz | null)?.title && (
+                    <div className="pt-2 border-t border-indigo-200/80 dark:border-indigo-900/50 space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-800 dark:text-indigo-200 px-0.5">
+                        Active quiz
+                      </p>
+                      <QuizResultsSummary
+                        quiz={activeQuiz as ActiveQuiz}
+                        answers={quizAnswers}
+                        submission={quizSubmission}
+                        status={
+                          quizSubmission
+                            ? "complete"
+                            : quizCandidateStarted
+                              ? "in-progress"
+                              : "waiting"
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2269,25 +2175,61 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         )}
 
         <div className="flex-1 flex flex-col min-h-0">
-          <CollaborativeEditor
-            ref={panelCodingEditorRef}
-            roomId={roomCode}
-            participantName={participant?.name || "Anonymous"}
-            participantRole="interviewer"
-            isSeeder={isHost}
-            language={(codingTask as { language?: string })?.language || "javascript"}
-            taskTitle={(codingTask as { title?: string })?.title}
-            taskDescription={(codingTask as { description?: string })?.description}
-            starterCode={(codingTask as { starterCode?: string })?.starterCode}
-            collaborationTaskId={(codingTask as { collaborationTaskId?: string })?.collaborationTaskId}
-            taskSource={
-              (codingTask as { source?: string } | null)?.source === "pre-interview-task"
-                ? "pre-interview-task"
-                : (codingTask as { source?: string } | null)?.source === "external-pre-task"
-                  ? "external-pre-task"
-                  : undefined
-            }
-          />
+          {(activeQuiz as ActiveQuiz | null)?.questions?.length ? (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="shrink-0 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-indigo-50/50 dark:bg-indigo-950/20">
+                <p className="text-xs font-medium text-indigo-900 dark:text-indigo-100">Live quiz — candidate view</p>
+                <p className="text-[10px] text-indigo-800/80 dark:text-indigo-200/80">
+                  Results update in real time as the candidate answers.
+                </p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <QuizResultsSummary
+                  quiz={activeQuiz as ActiveQuiz}
+                  answers={quizAnswers}
+                  submission={quizSubmission}
+                  status={
+                    quizSubmission
+                      ? "complete"
+                      : quizCandidateStarted
+                        ? "in-progress"
+                        : "waiting"
+                  }
+                />
+                {quizCandidateStarted && !quizSubmission && (
+                  <LiveQuizPanel
+                    quiz={activeQuiz as ActiveQuiz}
+                    participantName="Candidate"
+                    existingAnswers={quizAnswers}
+                    onAnswer={() => {}}
+                    onComplete={() => {}}
+                    readOnly
+                    forceStarted={quizCandidateStarted}
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            <CollaborativeEditor
+              ref={panelCodingEditorRef}
+              roomId={roomCode}
+              participantName={participant?.name || "Anonymous"}
+              participantRole="interviewer"
+              isSeeder={isHost}
+              language={(codingTask as { language?: string })?.language || "javascript"}
+              taskTitle={(codingTask as { title?: string })?.title}
+              taskDescription={(codingTask as { description?: string })?.description}
+              starterCode={(codingTask as { starterCode?: string })?.starterCode}
+              collaborationTaskId={(codingTask as { collaborationTaskId?: string })?.collaborationTaskId}
+              taskSource={
+                (codingTask as { source?: string } | null)?.source === "pre-interview-task"
+                  ? "pre-interview-task"
+                  : (codingTask as { source?: string } | null)?.source === "external-pre-task"
+                    ? "external-pre-task"
+                    : undefined
+              }
+            />
+          )}
         </div>
       </div>
     </div>

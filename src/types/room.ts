@@ -76,6 +76,10 @@ export interface RoomState {
   codingTask: unknown | null;
   activeQuiz: unknown | null;
   quizAnswers: unknown[];
+  /** True once the candidate clicks Start on an assigned live quiz. */
+  quizCandidateStarted: boolean;
+  /** Set when the candidate finishes the live quiz (full answer set). */
+  quizSubmission: unknown | null;
   questionScores: QuestionScoreEntry[];
   transcriptAnalyses: TranscriptAnalysisEntry[];
   interviewReport: InterviewReport | null;
@@ -114,7 +118,9 @@ export type RoomMessage =
   | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
   | { type: "quiz-start"; quiz: unknown }
+  | { type: "quiz-candidate-started" }
   | { type: "quiz-answer"; answer: unknown }
+  | { type: "quiz-complete"; submission: unknown }
   | { type: "question-score"; entry: QuestionScoreEntry }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }

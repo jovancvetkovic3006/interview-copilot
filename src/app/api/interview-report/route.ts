@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { summarizeTranscript } from "@/lib/summarize-transcript";
-import {
-  hasUsableTranscript,
-  MIN_INTERVIEWER_SESSION_NOTES_CHARS,
-} from "@/lib/interview-report-gate";
+import { hasUsableTranscript } from "@/lib/interview-report-gate";
 
 /**
  * If the spoken transcript has more than this many lines, we ask the dedicated transcript-summary
@@ -74,6 +71,7 @@ export async function POST(req: NextRequest) {
       questionScores,
       quizAnswers,
       activeQuiz,
+      quizSubmission,
     } = body as {
       roomCode?: string;
       participants?: { name: string; role: string }[];
@@ -102,6 +100,10 @@ export async function POST(req: NextRequest) {
       questionScores?: { question: string; category?: string; score: number; notes?: string }[];
       quizAnswers?: { questionId: string; selectedIndex: number }[];
       activeQuiz?: { title?: string; questions?: { id: string; question: string; correctIndex: number }[] };
+      quizSubmission?: {
+        answers?: { questionId: string; selectedIndex: number }[];
+        candidateName?: string;
+      };
     };
 
     const chatBlock = (messages ?? [])
@@ -169,16 +171,8 @@ export async function POST(req: NextRequest) {
     const sessionNotesTrimmed =
       typeof interviewerSessionNotes === "string" ? interviewerSessionNotes.trim() : "";
 
-    if (!hasUsableTranscript(transcriptLines)) {
-      if (sessionNotesTrimmed.length < MIN_INTERVIEWER_SESSION_NOTES_CHARS) {
-        return NextResponse.json(
-          {
-            error: `No spoken transcript was captured. Add interviewer session notes (at least ${MIN_INTERVIEWER_SESSION_NOTES_CHARS} characters) summarizing what was discussed before generating the report.`,
-          },
-          { status: 400 }
-        );
-      }
-    }
+    // Final notes are optional. When transcript is empty, report generation relies on whatever
+    // context is available (chat, coding/quiz evidence, optional notes).
 
     const cfgRole = String((config as { role?: unknown } | undefined)?.role ?? "") || undefined;
     const cfgDifficulty =
@@ -238,22 +232,26 @@ ${truncate(transcriptTailBlock, 60_000)}`;
     }
 
     const questionScoreBlock = (questionScores ?? [])
-      .map((s) => `- [${s.category || "general"}] ${s.score}/5 — ${s.question}${s.notes ? ` (note: ${s.notes})` : ""}`)
+      .map((s) => `- [${s.category || "general"}] ${s.score}/10 — ${s.question}${s.notes ? ` (note: ${s.notes})` : ""}`)
       .join("\n");
 
     let quizBlock = "(none)";
     const quiz = activeQuiz as { title?: string; questions?: { id: string; question: string; correctIndex: number }[] } | undefined;
-    if (quiz?.questions?.length && Array.isArray(quizAnswers) && quizAnswers.length > 0) {
-      const lines = quizAnswers.map((a) => {
+    const resolvedQuizAnswers =
+      quizSubmission?.answers?.length ? quizSubmission.answers : quizAnswers;
+    if (quiz?.questions?.length && Array.isArray(resolvedQuizAnswers) && resolvedQuizAnswers.length > 0) {
+      const lines = resolvedQuizAnswers.map((a) => {
         const q = quiz.questions!.find((qq) => qq.id === a.questionId);
-        const correct = q && a.selectedIndex === q.correctIndex;
-        return `- ${q?.question ?? a.questionId}: selected option ${a.selectedIndex + 1} (${correct ? "correct" : "incorrect"})`;
+        const skipped = a.selectedIndex < 0;
+        const correct = !skipped && q && a.selectedIndex === q.correctIndex;
+        return `- ${q?.question ?? a.questionId}: ${skipped ? "no answer / timed out" : `selected option ${a.selectedIndex + 1} (${correct ? "correct" : "incorrect"})`}`;
       });
-      const correctCount = quizAnswers.filter((a) => {
+      const correctCount = resolvedQuizAnswers.filter((a) => {
         const q = quiz.questions!.find((qq) => qq.id === a.questionId);
-        return q && a.selectedIndex === q.correctIndex;
+        return q && a.selectedIndex >= 0 && a.selectedIndex === q.correctIndex;
       }).length;
-      quizBlock = `Quiz: ${quiz.title ?? "Live quiz"}\nScore: ${correctCount}/${quiz.questions.length}\n${lines.join("\n")}`;
+      const who = quizSubmission?.candidateName ? ` (${quizSubmission.candidateName})` : "";
+      quizBlock = `Quiz: ${quiz.title ?? "Live quiz"}${who}\nScore: ${correctCount}/${quiz.questions.length}\n${lines.join("\n")}`;
     }
 
     const userContent = `You are writing the official post-interview packet for the hiring panel.

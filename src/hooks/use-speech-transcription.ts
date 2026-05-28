@@ -20,7 +20,7 @@ const WATCHDOG_IDLE_MS = 45_000;
 const PROACTIVE_ROTATION_MS = 50_000;
 
 export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = {}) {
-  const { onTranscript, language = "sr-RS" } = options;
+  const { onTranscript, language = "en-US" } = options;
   const [isRecording, setIsRecording] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   const [speechNotice, setSpeechNotice] = useState<string | null>(null);

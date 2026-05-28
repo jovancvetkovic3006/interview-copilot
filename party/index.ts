@@ -30,7 +30,9 @@ export type RoomMessage =
   | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
   | { type: "coding-task"; task: unknown }
   | { type: "quiz-start"; quiz: unknown }
+  | { type: "quiz-candidate-started" }
   | { type: "quiz-answer"; answer: unknown }
+  | { type: "quiz-complete"; submission: unknown }
   | { type: "question-score"; entry: QuestionScoreEntry }
   | { type: "transcript"; text: string; speaker: string; timestamp: number }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
@@ -84,6 +86,8 @@ interface RoomState {
   codingTask: unknown | null;
   activeQuiz: unknown | null;
   quizAnswers: unknown[];
+  quizCandidateStarted: boolean;
+  quizSubmission: unknown | null;
   questionScores: QuestionScoreEntry[];
   transcriptAnalyses: TranscriptAnalysisEntry[];
   interviewReport: InterviewReport | null;
@@ -119,6 +123,8 @@ export default class InterviewRoom implements Party.Server {
     codingTask: null,
     activeQuiz: null,
     quizAnswers: [],
+    quizCandidateStarted: false,
+    quizSubmission: null,
     questionScores: [],
     transcriptAnalyses: [],
     interviewReport: null,
@@ -324,13 +330,39 @@ export default class InterviewRoom implements Party.Server {
         this.state.activeQuiz = quiz;
         this.state.codingTask = null;
         this.state.quizAnswers = [];
+        this.state.quizCandidateStarted = false;
+        this.state.quizSubmission = null;
         this.room.broadcast(JSON.stringify({ type: "quiz-start", quiz } satisfies RoomMessage));
         break;
       }
 
+      case "quiz-candidate-started": {
+        this.state.quizCandidateStarted = true;
+        this.room.broadcast(JSON.stringify({ type: "quiz-candidate-started" } satisfies RoomMessage));
+        break;
+      }
+
       case "quiz-answer": {
+        const answer = data.answer as { questionId?: string };
+        if (answer && typeof answer.questionId === "string") {
+          this.state.quizAnswers = this.state.quizAnswers.filter(
+            (a) =>
+              !(
+                a !== null &&
+                typeof a === "object" &&
+                (a as { questionId?: string }).questionId === answer.questionId
+              )
+          );
+        }
         this.state.quizAnswers.push(data.answer);
         this.room.broadcast(JSON.stringify(data), [sender.id]);
+        break;
+      }
+
+      case "quiz-complete": {
+        this.state.quizSubmission = data.submission;
+        this.state.quizCandidateStarted = true;
+        this.room.broadcast(JSON.stringify({ type: "quiz-complete", submission: data.submission } satisfies RoomMessage));
         break;
       }
 

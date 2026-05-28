@@ -42,11 +42,18 @@ function buildSystemPrompt(config: {
   difficulty: string;
   topics: string[];
   candidateName: string;
-  /** When true (collaborative PartyKit room), never emit [INTERVIEW_COMPLETE]; the host ends from the UI. */
+  /** Private interviewer-assistant mode for collaborative room. */
   collaborativeRoom?: boolean;
   agentInstructions?: string;
   uploadedFiles?: { name: string; type: string; text: string }[];
   notes?: string;
+  transcriptInsights?: {
+    summary: string;
+    answerQuality: string;
+    score: number;
+    followUpQuestions?: string[];
+  }[];
+  recentQuestionScores?: { question: string; score: number; category?: string }[];
   preInterviewTask?: {
     title: string;
     description: string;
@@ -77,7 +84,7 @@ function buildSystemPrompt(config: {
     requestedBy?: "interviewer" | "candidate";
   };
 }) {
-  let prompt = `You are an expert technical interviewer conducting an interview for a ${config.difficulty}-level ${config.role} position.
+  let prompt = `You are an interviewer assistant helping a human interviewer run a ${config.difficulty}-level ${config.role} interview.
 
 The candidate's name is ${config.candidateName}.
 
@@ -110,6 +117,33 @@ ${file.text}`;
 
 NOTES ABOUT CANDIDATE:
 ${config.notes}`;
+  }
+
+  if (config.transcriptInsights && config.transcriptInsights.length > 0) {
+    prompt += `
+
+LIVE TRANSCRIPT INSIGHTS (latest speech-analysis summaries; use these to guide follow-ups):
+${config.transcriptInsights
+  .slice(-8)
+  .map(
+    (i, idx) =>
+      `${idx + 1}. [${i.answerQuality}, ${i.score}/10] ${i.summary}${
+        i.followUpQuestions?.length
+          ? `\n   Suggested follow-ups: ${i.followUpQuestions.join(" | ")}`
+          : ""
+      }`
+  )
+  .join("\n")}`;
+  }
+
+  if (config.recentQuestionScores && config.recentQuestionScores.length > 0) {
+    prompt += `
+
+RECENT MANUAL QUESTION SCORES (interviewer-rated):
+${config.recentQuestionScores
+  .slice(-10)
+  .map((s, idx) => `${idx + 1}. [${s.score}/10] ${s.category ? `[${s.category}] ` : ""}${s.question}`)
+  .join("\n")}`;
   }
 
   if (config.preInterviewTask) {
@@ -196,46 +230,23 @@ ${s.code}
 
   prompt += `
 
-Your behavior:
-- Be professional, friendly, and encouraging
-- Ask one question at a time
-- Start with introductory/warm-up questions, then progressively increase difficulty
-- Mix conceptual questions with practical scenario-based questions
-- If uploaded documents were provided, reference specific projects or experience from them
-- If a pre-interview coding task was submitted, discuss it early in the interview
-- If predefined questions were provided, prioritize asking those
-- If predefined coding tasks were provided, use those instead of generating new ones
-- When appropriate, assign a coding task using the special format below
-- Evaluate responses and provide brief follow-up if needed
-- Keep track of the conversation flow naturally
+Your role and behavior:
+- You are talking to the interviewer only (private assistant), never to the candidate.
+- Be proactive: suggest what to ask next and why.
+- Offer 2-4 concise follow-up questions based on the latest transcript insights.
+- Keep track of interview direction across topics and scored questions.
+- Use transcript insights, manual scores, coding reviews, quiz outcomes, CV/bio, and pre-task context.
+- If coding-task review context is provided, focus on assessment quality, risks, and concrete next probes.
+- Do not claim to have directly observed non-textual behavior (body language, tone confidence, etc.) unless explicitly present in provided data.
+- Do not emit [INTERVIEW_COMPLETE] or similar control markers.
 ${codingReviewBehaviorHint}
 
-Output formatting (your messages render as Markdown in a chat bubble):
-- When a reply has more than one part — e.g. a greeting plus a question, or a code review plus a follow-up — separate them into distinct paragraphs (a blank line between them) so each part is visually clear.
-- Use short bold subheadings (\`**Strengths**\`, \`**Suggestions**\`, \`**Next**\`, etc.) when grouping multiple bullet points.
-- Use bullet lists (\`- item\`) for enumerations of three or more items; keep prose prose.
-- Use fenced code blocks (\`\`\`language) for any multi-line code or shell snippets, and inline backticks for symbol/file/identifier names.
-- Keep paragraphs short (1-3 sentences). Avoid walls of text.
-- Do NOT prefix every reply with a heading; only use headings when they actually help structure a multi-section answer.
-
-To assign a coding task, include it in your response using this EXACT JSON format on its own line:
-[CODING_TASK]{"title":"Task Title","description":"Detailed description of the task","starterCode":"// starter code here","language":"javascript"}[/CODING_TASK]
-
-After code is submitted for review (by the candidate in chat, or by the interviewer using the review action), evaluate it and provide feedback.
-${
-  config.collaborativeRoom
-    ? `
-
-COLLABORATIVE LIVE ROOM:
-- Do **not** include the marker [INTERVIEW_COMPLETE] in any reply. The human host ends the interview from the app when they are ready; you must not attempt to auto-close the session or tell the candidate the interview is officially over.
-- When the scheduled block runs out, the host can add more time — keep helping until they end the session from the UI.`
-    : `
-
-When the interview should end (after sufficient questions and at least one coding task), include this marker:
-[INTERVIEW_COMPLETE]`
-}
-
-Remember to be conversational and natural. Do not number your questions.`;
+Output format (for interviewer assistant panel):
+- Keep responses concise and actionable.
+- Prefer sections like **Next best question**, **Follow-ups**, **Scoring hint**, **What to probe**.
+- Provide clickable-style short question options (single-sentence) the interviewer can ask verbatim.
+- Keep paragraphs short (1-3 sentences).
+- Do not number every reply unless ranking options helps.`;
 
   return prompt;
 }
