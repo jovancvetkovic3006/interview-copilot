@@ -470,14 +470,28 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   }, [inviteDropdownOpen]);
 
   // PartyKit phase is the source of truth once the session has started.
+  const sessionIsLive =
+    phase === "interview" ||
+    phase === "review" ||
+    interviewStartedAt != null ||
+    sharedConfig != null ||
+    codingTask != null ||
+    activeQuiz != null ||
+    codingTaskHistory.length > 0 ||
+    quizHistory.length > 0;
+
   const activeStep: Step =
-    phase === "review" ? "review" : phase === "interview" ? "interview" : step;
+    phase === "review"
+      ? "review"
+      : phase === "interview" || (sessionIsLive && step !== "join")
+        ? "interview"
+        : step;
 
   useEffect(() => {
-    if (phase === "interview" && step === "setup") {
+    if (sessionIsLive && step === "setup") {
       setStep("interview");
     }
-  }, [phase, step]);
+  }, [sessionIsLive, step]);
 
   // Background speech analysis: only the designated host triggers the API (avoids duplicate calls per interviewer).
   // Other interviewers still receive `transcript-analysis` over PartyKit and see the same panel.

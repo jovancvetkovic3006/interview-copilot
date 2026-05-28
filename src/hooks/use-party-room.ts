@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import PartySocket from "partysocket";
+import { nextTimeExtensionMinutes, interviewDurationMinutes } from "@/lib/interview-deadline";
 import { transcriptionTrace } from "@/lib/transcription-trace";
 import type {
   Participant,
@@ -20,11 +21,35 @@ import type { QuizAnswerEntry, QuizSubmission } from "@/types/quiz";
 
 const PARTYKIT_HOST = process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999";
 
+/** True when PartyKit state clearly belongs to a session that has started (not pre-setup waiting). */
+function syncStateIndicatesLiveSession(s: {
+  phase?: string;
+  interviewStartedAt?: number | null;
+  config?: unknown | null;
+  codingTask?: unknown | null;
+  activeQuiz?: unknown | null;
+  codingTaskHistory?: unknown[];
+  quizHistory?: unknown[];
+}): boolean {
+  return (
+    s.phase === "interview" ||
+    s.phase === "review" ||
+    s.interviewStartedAt != null ||
+    s.config != null ||
+    s.codingTask != null ||
+    s.activeQuiz != null ||
+    (s.codingTaskHistory?.length ?? 0) > 0 ||
+    (s.quizHistory?.length ?? 0) > 0
+  );
+}
+
 export function usePartyRoom(roomId: string | null, participant: Participant | null) {
   const socketRef = useRef<PartySocket | null>(null);
   const participantRoleRef = useRef<Participant["role"] | null>(null);
   const phaseRef = useRef<RoomState["phase"]>("setup");
   const interviewSeenRef = useRef(false);
+  const interviewStartedAtRef = useRef<number | null>(null);
+  const configRef = useRef<unknown | null>(null);
 
   const [connected, setConnected] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -63,6 +88,14 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
       interviewSeenRef.current = true;
     }
   }, [phase]);
+
+  useEffect(() => {
+    interviewStartedAtRef.current = interviewStartedAt;
+  }, [interviewStartedAt]);
+
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
 
   useEffect(() => {
     if (!roomId || !participant) return;
@@ -136,9 +169,8 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             interviewSeenRef.current = true;
           }
           setPhase(nextPhase);
-          if ("interviewStartedAt" in data) {
-            const v = data.interviewStartedAt;
-            setInterviewStartedAt(typeof v === "number" ? v : null);
+          if (typeof data.interviewStartedAt === "number") {
+            setInterviewStartedAt(data.interviewStartedAt);
           }
           if ("timeExtensionMinutes" in data && typeof data.timeExtensionMinutes === "number") {
             setTimeExtensionMinutes(data.timeExtensionMinutes);
@@ -146,26 +178,37 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           break;
         }
         case "interview-time": {
-          const startedAt =
-            typeof data.interviewStartedAt === "number" ? data.interviewStartedAt : null;
-          setInterviewStartedAt(startedAt);
+          if (typeof data.interviewStartedAt === "number") {
+            setInterviewStartedAt(data.interviewStartedAt);
+          }
           setTimeExtensionMinutes(
             typeof data.timeExtensionMinutes === "number" ? data.timeExtensionMinutes : 0
           );
-          if (startedAt != null) {
-            interviewSeenRef.current = true;
-            setPhase((prev) => (prev === "setup" ? "interview" : prev));
-          }
+          // Server only emits this during an live interview — always leave the waiting room.
+          interviewSeenRef.current = true;
+          setPhase((prev) => (prev === "setup" ? "interview" : prev));
           break;
         }
         case "coding-task":
           setCodingTask(data.task);
+          interviewSeenRef.current = true;
+          setPhase((prev) => (prev === "setup" ? "interview" : prev));
           break;
         case "quiz-start":
           setActiveQuiz(data.quiz);
+          interviewSeenRef.current = true;
+          setPhase((prev) => (prev === "setup" ? "interview" : prev));
           break;
         case "assignment-state":
           applyAssignmentState(data);
+          if (
+            data.activeAssignment !== "none" ||
+            data.codingTaskHistory.length > 0 ||
+            data.quizHistory.length > 0
+          ) {
+            interviewSeenRef.current = true;
+            setPhase((prev) => (prev === "setup" ? "interview" : prev));
+          }
           break;
         case "quiz-candidate-started":
           setQuizCandidateStarted(true);
@@ -245,6 +288,17 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             if (typeof s.timeExtensionMinutes === "number") {
               setTimeExtensionMinutes(s.timeExtensionMinutes);
             }
+            if (s.config != null) setConfig(s.config);
+            applyAssignmentState({
+              activeAssignment: s.activeAssignment ?? "none",
+              codingTask: s.codingTask,
+              activeQuiz: s.activeQuiz ?? null,
+              quizAnswers: s.quizAnswers ?? [],
+              quizCandidateStarted: Boolean(s.quizCandidateStarted),
+              quizSubmission: s.quizSubmission ?? null,
+              codingTaskHistory: s.codingTaskHistory ?? [],
+              quizHistory: s.quizHistory ?? [],
+            });
             break;
           }
           transcriptionTrace("socket ← sync-response", {
@@ -263,15 +317,12 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           }
           {
             let nextPhase = incomingPhase;
-            if (
-              interviewSeenRef.current &&
-              incomingPhase === "setup" &&
-              (s.interviewStartedAt != null || s.config != null)
-            ) {
+            if (incomingPhase === "setup" && syncStateIndicatesLiveSession(s)) {
               nextPhase = "interview";
               transcriptionTrace("sync-response coerced setup → interview", {
                 interviewStartedAt: s.interviewStartedAt,
                 hasConfig: Boolean(s.config),
+                serverPhase: incomingPhase,
               });
             }
             if (nextPhase === "interview" || nextPhase === "review") {
@@ -408,8 +459,14 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   }, []);
 
   const sendTimeExtension = useCallback((addMinutes: 30 | 60) => {
-    const delta = addMinutes === 60 ? 60 : 30;
-    setTimeExtensionMinutes((prev) => prev + delta);
+    setTimeExtensionMinutes((prev) =>
+      nextTimeExtensionMinutes(
+        interviewStartedAtRef.current,
+        interviewDurationMinutes(configRef.current),
+        prev,
+        addMinutes
+      )
+    );
     if (!socketRef.current) return;
     socketRef.current.send(
       JSON.stringify({ type: "time-extension", addMinutes } satisfies RoomMessage)

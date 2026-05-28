@@ -1,4 +1,5 @@
 import type * as Party from "partykit/server";
+import { interviewDurationMinutes, nextTimeExtensionMinutes } from "@/lib/interview-deadline";
 
 /** Mirrors `TranscriptAnalysisEntry` in src/types/room.ts (kept local for PartyKit bundle). */
 interface TranscriptAnalysisEntry {
@@ -424,8 +425,12 @@ export default class InterviewRoom implements Party.Server {
 
       case "time-extension": {
         if (this.state.phase !== "interview") break;
-        const add = data.addMinutes === 60 ? 60 : 30;
-        this.state.timeExtensionMinutes += add;
+        this.state.timeExtensionMinutes = nextTimeExtensionMinutes(
+          this.state.interviewStartedAt,
+          interviewDurationMinutes(this.state.config),
+          this.state.timeExtensionMinutes,
+          data.addMinutes
+        );
         this.room.broadcast(
           JSON.stringify({
             type: "interview-time",
