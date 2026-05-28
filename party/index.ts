@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server";
 import { interviewDurationMinutes, nextTimeExtensionMinutes } from "@/lib/interview-deadline";
+import { upsertQuestionScoreEntry } from "@/lib/question-scoring";
 
 /** Mirrors `TranscriptAnalysisEntry` in src/types/room.ts (kept local for PartyKit bundle). */
 interface TranscriptAnalysisEntry {
@@ -549,8 +550,11 @@ export default class InterviewRoom implements Party.Server {
       }
 
       case "question-score": {
-        this.state.questionScores.push(data.entry);
-        this.room.broadcast(JSON.stringify(data), [sender.id]);
+        this.state.questionScores = upsertQuestionScoreEntry(
+          this.state.questionScores,
+          data.entry
+        );
+        this.room.broadcast(JSON.stringify(data));
         break;
       }
 

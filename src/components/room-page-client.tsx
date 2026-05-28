@@ -33,7 +33,7 @@ import { LiveQuizPanel } from "@/components/live-quiz-panel";
 import { QuizResultsSummary } from "@/components/quiz-results-summary";
 import { AssignmentHistoryStrip } from "@/components/assignment-history-strip";
 import { QuestionScorePrompt } from "@/components/question-score-prompt";
-import { scoreLevelLabel } from "@/lib/question-scoring";
+import { findQuestionScoreIndex, scoreLevelShortLabel } from "@/lib/question-scoring";
 import { buildLiveQuizAgentContext } from "@/lib/quiz-summary";
 import {
   Users,
@@ -924,6 +924,11 @@ If the quiz is still in progress, note what is provisional and what to watch for
   const visiblePanelTaskGroups = filterGroupsByQuery(codingTaskGroups, panelTasksQuery, taskSearchableText);
   const visiblePanelTaskCount = visiblePanelTaskGroups.reduce((n, g) => n + g.items.length, 0);
 
+  const pendingExistingScore =
+    pendingScoreQuestion != null
+      ? questionScores[findQuestionScoreIndex(questionScores, pendingScoreQuestion)]
+      : undefined;
+
   /**
    * External PRE-TASKs (interviewer pasted task + candidate solution at setup time). Rendered as a
    * dedicated group at the top of the in-room Coding Tasks panel, separate from the role's preset
@@ -1045,21 +1050,31 @@ If the quiz is still in progress, note what is provisional and what to watch for
   const handleQuestionScore = useCallback(
     (score: number, notes?: string) => {
       if (!participant || !pendingScoreQuestion) return;
+      const existingIdx = findQuestionScoreIndex(questionScores, pendingScoreQuestion);
+      const existing = existingIdx >= 0 ? questionScores[existingIdx] : undefined;
       const entry: QuestionScoreEntry = {
-        id: `qs-${Date.now()}`,
+        id: existing?.id ?? `qs-${Date.now()}`,
         questionId: pendingScoreQuestion.questionId,
         question: pendingScoreQuestion.question,
         category: pendingScoreQuestion.category,
         score,
         scoredAt: Date.now(),
         scoredBy: participant.name,
-        ...(notes ? { notes } : {}),
+        ...(notes ? { notes } : existing?.notes ? { notes: existing.notes } : {}),
       };
       sendQuestionScore(entry);
       setPendingScoreQuestion(null);
     },
-    [participant, pendingScoreQuestion, sendQuestionScore]
+    [participant, pendingScoreQuestion, questionScores, sendQuestionScore]
   );
+
+  const beginRescoreQuestion = useCallback((entry: QuestionScoreEntry) => {
+    setPendingScoreQuestion({
+      question: entry.question,
+      questionId: entry.questionId,
+      category: entry.category,
+    });
+  }, []);
 
   const handleSendQuestionWithScore = useCallback(
     async (question: string, meta?: { questionId?: string; category?: string }) => {
@@ -1949,6 +1964,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                     <QuestionScorePrompt
                       question={pendingScoreQuestion.question}
                       category={pendingScoreQuestion.category}
+                      previousScore={pendingExistingScore?.score}
                       onScore={(score) => handleQuestionScore(score)}
                       onDismiss={() => setPendingScoreQuestion(null)}
                     />
@@ -1958,9 +1974,25 @@ If the quiz is still in progress, note what is provisional and what to watch for
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300 px-0.5">
                         Question scores ({questionScores.length})
                       </p>
-                      {questionScores.slice(-5).map((s) => (
-                        <div key={s.id} className="text-[10px] rounded border border-indigo-200/80 dark:border-indigo-900/60 px-2 py-1.5 bg-white/80 dark:bg-zinc-900/80">
-                          <span className="font-medium">{s.score}/10</span> — {scoreLevelLabel(s.score)}
+                      {[...questionScores].reverse().map((s) => (
+                        <div
+                          key={s.id}
+                          className="text-[10px] rounded border border-indigo-200/80 dark:border-indigo-900/60 px-2 py-1.5 bg-white/80 dark:bg-zinc-900/80"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-medium shrink-0">
+                              {s.score}/10 · {scoreLevelShortLabel(s.score)}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-1.5 text-[10px] shrink-0"
+                              onClick={() => beginRescoreQuestion(s)}
+                            >
+                              Change score
+                            </Button>
+                          </div>
                           <p className="text-zinc-600 dark:text-zinc-400 line-clamp-2 mt-0.5">{s.question}</p>
                         </div>
                       ))}

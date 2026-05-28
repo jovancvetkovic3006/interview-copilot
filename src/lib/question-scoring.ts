@@ -76,5 +76,42 @@ export type QuestionScoreValue = (typeof QUESTION_SCORE_LEVELS)[number]["value"]
 
 export function scoreLevelLabel(value: number): string {
   const level = QUESTION_SCORE_LEVELS.find((l) => l.value === value);
-  return level ? `${level.label} — ${level.description}` : `Score ${value}/5`;
+  return level ? `${level.label} — ${level.description}` : `Score ${value}/10`;
+}
+
+export function scoreLevelShortLabel(value: number): string {
+  const level = QUESTION_SCORE_LEVELS.find((l) => l.value === value);
+  return level?.shortLabel ?? `${value}/10`;
+}
+
+/** Match key for the same asked question (preset id or exact text). */
+export function questionScoreMatchKey(entry: {
+  questionId?: string;
+  question: string;
+}): string {
+  if (entry.questionId) return `id:${entry.questionId}`;
+  return `q:${entry.question.trim()}`;
+}
+
+export function findQuestionScoreIndex<
+  T extends { id: string; questionId?: string; question: string },
+>(scores: T[], entry: { id?: string; questionId?: string; question: string }): number {
+  if (entry.id) {
+    const byId = scores.findIndex((s) => s.id === entry.id);
+    if (byId >= 0) return byId;
+  }
+  const key = questionScoreMatchKey(entry);
+  return scores.findIndex((s) => questionScoreMatchKey(s) === key);
+}
+
+export function upsertQuestionScoreEntry<
+  T extends { id: string; questionId?: string; question: string },
+>(scores: T[], entry: T): T[] {
+  const idx = findQuestionScoreIndex(scores, entry);
+  if (idx >= 0) {
+    const next = [...scores];
+    next[idx] = { ...entry, id: scores[idx].id };
+    return next;
+  }
+  return [...scores, entry];
 }

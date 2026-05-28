@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import PartySocket from "partysocket";
 import { nextTimeExtensionMinutes, interviewDurationMinutes } from "@/lib/interview-deadline";
+import { upsertQuestionScoreEntry } from "@/lib/question-scoring";
 import { transcriptionTrace } from "@/lib/transcription-trace";
 import type {
   Participant,
@@ -231,7 +232,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           break;
         case "question-score":
           if (participantRoleRef.current !== "interviewer") break;
-          setQuestionScores((prev) => [...prev, data.entry]);
+          setQuestionScores((prev) => upsertQuestionScoreEntry(prev, data.entry));
           break;
         case "transcript": {
           // Live transcript is interviewer-only; candidates still send lines via sendTranscript.
@@ -454,7 +455,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const sendQuestionScore = useCallback((entry: QuestionScoreEntry) => {
     if (!socketRef.current) return;
     if (participantRoleRef.current !== "interviewer") return;
-    setQuestionScores((prev) => [...prev, entry]);
+    setQuestionScores((prev) => upsertQuestionScoreEntry(prev, entry));
     socketRef.current.send(JSON.stringify({ type: "question-score", entry } satisfies RoomMessage));
   }, []);
 
