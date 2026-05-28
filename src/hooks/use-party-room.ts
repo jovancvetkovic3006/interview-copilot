@@ -167,6 +167,8 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           setQuestionScores((prev) => [...prev, data.entry]);
           break;
         case "transcript": {
+          // Live transcript is interviewer-only; candidates still send lines via sendTranscript.
+          if (participantRoleRef.current === "candidate") break;
           const preview =
             data.text.length > 120 ? `${data.text.slice(0, 120)}…` : data.text;
           transcriptionTrace("socket ← transcript", {
@@ -232,7 +234,9 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           setMessages(data.state.messages.filter((m) =>
             participantRoleRef.current === "candidate" ? m.role !== "agent" : true
           ));
-          setTranscript(data.state.transcript);
+          if (participantRoleRef.current !== "candidate") {
+            setTranscript(data.state.transcript);
+          }
           {
             let nextPhase = incomingPhase;
             if (
@@ -380,7 +384,9 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
       preview,
       socketOpen: Boolean(socketRef.current),
     });
-    setTranscript((prev) => [...prev, entry]);
+    if (participantRoleRef.current !== "candidate") {
+      setTranscript((prev) => [...prev, entry]);
+    }
     if (!socketRef.current) return;
     socketRef.current.send(
       JSON.stringify({ type: "transcript", ...entry } satisfies RoomMessage)

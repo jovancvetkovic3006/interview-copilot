@@ -53,6 +53,8 @@ function buildSystemPrompt(config: {
     score: number;
     followUpQuestions?: string[];
   }[];
+  /** Recent live transcript lines from all participants (candidate + interviewers). */
+  recentTranscript?: { speaker: string; role: string; text: string }[];
   recentQuestionScores?: { question: string; score: number; category?: string }[];
   preInterviewTask?: {
     title: string;
@@ -117,6 +119,16 @@ ${file.text}`;
 
 NOTES ABOUT CANDIDATE:
 ${config.notes}`;
+  }
+
+  if (config.recentTranscript && config.recentTranscript.length > 0) {
+    prompt += `
+
+RECENT LIVE TRANSCRIPT (all participants — candidate and interviewers; may contain STT errors):
+${config.recentTranscript
+  .slice(-80)
+  .map((line) => `[${line.role}] ${line.speaker}: ${line.text}`)
+  .join("\n")}`;
   }
 
   if (config.transcriptInsights && config.transcriptInsights.length > 0) {
@@ -233,9 +245,9 @@ ${s.code}
 Your role and behavior:
 - You are talking to the interviewer only (private assistant), never to the candidate.
 - Be proactive: suggest what to ask next and why.
-- Offer 2-4 concise follow-up questions based on the latest transcript insights.
+- Offer 2-4 concise follow-up questions based on the latest transcript insights and recent live transcript.
 - Keep track of interview direction across topics and scored questions.
-- Use transcript insights, manual scores, coding reviews, quiz outcomes, CV/bio, and pre-task context.
+- Use the recent live transcript (all speakers), transcript insights, manual scores, coding reviews, quiz outcomes, CV/bio, and pre-task context.
 - If coding-task review context is provided, focus on assessment quality, risks, and concrete next probes.
 - Do not claim to have directly observed non-textual behavior (body language, tone confidence, etc.) unless explicitly present in provided data.
 - Do not emit [INTERVIEW_COMPLETE] or similar control markers.

@@ -353,11 +353,28 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               })),
             }
           : {}),
+        ...(transcript.length
+          ? {
+              recentTranscript: transcript.slice(-80).map((e) => ({
+                speaker: e.speaker,
+                role:
+                  participants.find((p) => p.name === e.speaker)?.role ??
+                  (e.speaker === candidateName ? "candidate" : "interviewer"),
+                text: e.text,
+              })),
+            }
+          : {}),
         collaborativeRoom: true as const,
       };
     },
-    [participants, participant?.name, transcriptAnalyses, questionScores]
+    [participants, participant?.name, transcriptAnalyses, questionScores, transcript]
   );
+
+  const speakerRoleByName = useMemo(() => {
+    const map = new Map<string, Participant["role"]>();
+    for (const p of participants) map.set(p.name, p.role);
+    return map;
+  }, [participants]);
 
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const lastAnalyzedTranscriptLenRef = useRef(0);
@@ -465,6 +482,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             candidateName:
               cfg?.candidateName ||
               participants.find((p) => p.role === "candidate")?.name,
+            panelParticipants: participants.map((p) => ({ name: p.name, role: p.role })),
           }),
         });
         const data = (await res.json()) as {
@@ -587,14 +605,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     onTranscript: handleTranscriptSegment,
     language: speechLanguage,
   });
-
-  const candidateSpeakerNames = useMemo(
-    () =>
-      new Set(
-        participants.filter((p) => p.role === "candidate").map((p) => p.name)
-      ),
-    [participants]
-  );
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1276,12 +1286,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         )}
         {phase === "interview" && !isRecording && speechSupported && (
           <div className="px-4 py-2 text-center text-sm bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 border-b border-blue-200 dark:border-blue-900/50">
-            Tap <strong>Record</strong> so the interviewer can see your spoken answers in the live transcript.
+            Tap <strong>Record</strong> when you speak so the interview panel can capture your answers (not shown on your screen).
           </div>
         )}
 
         <div className="flex-1 flex overflow-hidden min-h-0">
-          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {hasQuiz && liveQuiz ? (
             <LiveQuizPanel
               quiz={liveQuiz}
@@ -1323,33 +1332,6 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               </p>
             </div>
           )}
-          </div>
-
-          <div className="w-72 shrink-0 flex flex-col border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 min-h-0">
-            <div className="px-3 py-2 flex items-center gap-1.5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-              <Mic className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`} />
-              <span className="text-xs font-medium">Live transcript</span>
-              {isRecording && <span className="text-[10px] text-red-500">● REC</span>}
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
-              {transcript.length === 0 && !interimText ? (
-                <p className="text-zinc-400 italic leading-relaxed">
-                  Your speech is shared with the interviewer after you tap Record.
-                </p>
-              ) : (
-                transcript.slice(-40).map((entry, i) => (
-                  <div key={`${entry.timestamp}-${i}-${entry.text.slice(0, 12)}`}>
-                    <span className="font-medium">{entry.speaker}:</span> {entry.text}
-                  </div>
-                ))
-              )}
-              {interimText && (
-                <div className="text-zinc-400 italic">
-                  <span className="font-medium">{participant?.name}:</span> {interimText}…
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -1599,19 +1581,31 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             <div className="flex-1 min-h-[72px] max-h-[26vh] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
               {transcript.length === 0 && !interimText ? (
                 <p className="text-zinc-400 italic leading-relaxed">
-                  Candidate answers appear here after they tap <strong>Record</strong> on their interview page (each person captures their own mic). Your speech appears when you record here.
+                  Speech from the <strong>candidate</strong> and every <strong>interviewer</strong> appears here after each person taps <strong>Record</strong> on their device (own mic).
                 </p>
               ) : (
                 transcript.slice(-30).map((entry, i) => {
+                  const lineRole = speakerRoleByName.get(entry.speaker);
                   const isCandidateLine =
-                    candidateSpeakerNames.has(entry.speaker) ||
-                    entry.speaker === "Candidate";
+                    lineRole === "candidate" || entry.speaker === "Candidate";
+                  const isInterviewerLine = lineRole === "interviewer";
                   return (
                     <div
                       key={`${entry.timestamp}-${i}-${entry.text.slice(0, 12)}`}
-                      className={isCandidateLine ? "text-blue-800 dark:text-blue-200" : undefined}
+                      className={
+                        isCandidateLine
+                          ? "text-blue-800 dark:text-blue-200"
+                          : isInterviewerLine
+                            ? "text-purple-900 dark:text-purple-200"
+                            : undefined
+                      }
                     >
-                      <span className="font-medium">{entry.speaker}:</span> {entry.text}
+                      <span className="font-medium">{entry.speaker}</span>
+                      {lineRole && (
+                        <span className="text-[10px] text-zinc-500 ml-1">({lineRole})</span>
+                      )}
+                      <span className="text-zinc-500">: </span>
+                      {entry.text}
                     </div>
                   );
                 })
@@ -1636,7 +1630,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
             <div className="flex-1 min-h-[72px] max-h-[28vh] overflow-y-auto p-3 space-y-2">
               {transcriptAnalyses.length === 0 && !analysisBusy ? (
                 <p className="text-xs text-violet-800/75 dark:text-violet-200/75 italic leading-relaxed">
-                  When the candidate records (or anyone adds speech to the shared transcript), the host&apos;s client analyzes recent lines here — summary, score, answer quality, and follow-up ideas.
+                  When anyone records (candidate or interviewers), the host&apos;s client analyzes the latest transcript window — candidate answer quality, context from all panel speech, and follow-up ideas.
                 </p>
               ) : (
                 transcriptAnalyses.slice(-8).map((a) => (

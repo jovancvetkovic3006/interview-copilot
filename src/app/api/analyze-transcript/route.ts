@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       difficulty,
       topics,
       candidateName,
+      panelParticipants,
     } = body as {
       transcriptWindow: string;
       recentChat?: { speaker: string; content: string }[];
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
       difficulty?: string;
       topics?: string[];
       candidateName?: string;
+      panelParticipants?: { name: string; role: "interviewer" | "candidate" }[];
     };
 
     if (!transcriptWindow || typeof transcriptWindow !== "string" || transcriptWindow.trim().length < 20) {
@@ -63,15 +65,25 @@ export async function POST(req: NextRequest) {
         ? recentChat.map((m) => `${m.speaker}: ${m.content}`).join("\n")
         : "(no typed chat in this window)";
 
+    const panelBlock =
+      panelParticipants && panelParticipants.length > 0
+        ? panelParticipants.map((p) => `- ${p.name} (${p.role})`).join("\n")
+        : `(candidate: ${candidateName || "the candidate"}; interviewers may appear by name in the transcript)`;
+
     const system = `You are an expert interview coach helping ONLY the hiring panel (not the candidate).
 You receive a short window of LIVE SPEECH TRANSCRIPT from a technical interview (may contain errors from speech-to-text).
+Lines are labeled by speaker name and may include **multiple interviewers** and the **candidate** (each person records on their own device).
 The interview is for a ${difficulty || "mid"} level ${role || "software"} role. Topics: ${(topics || ["general"]).join(", ")}.
 The primary candidate is named ${candidateName || "the candidate"}.
 
+Panel in the room:
+${panelBlock}
+
 Your job:
-- Infer whether the candidate likely answered an interview question vs small talk / silence / interviewer-only.
+- Read the full window: candidate answers **and** what interviewers asked or clarified.
+- Infer whether the candidate likely answered an interview question vs small talk / silence / interviewer-only lines.
 - If there is no substantive candidate answer, set answerQuality to "n/a" and score 0 with a brief summary explaining why.
-- Otherwise rate how strong the (spoken) answer appears: depth, clarity, relevance, and technical correctness where applicable.
+- Otherwise rate how strong the candidate's (spoken) answer appears: depth, clarity, relevance, and technical correctness where applicable.
 - Be concise and fair; transcript may be imperfect.
 - Suggest up to **3 short, specific follow-up questions** the interviewer could ask next to dig
   deeper, probe weak spots, or verify claims. Each question should:
