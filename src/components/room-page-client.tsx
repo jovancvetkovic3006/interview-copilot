@@ -33,7 +33,12 @@ import { LiveQuizPanel } from "@/components/live-quiz-panel";
 import { QuizResultsSummary } from "@/components/quiz-results-summary";
 import { AssignmentHistoryStrip } from "@/components/assignment-history-strip";
 import { QuestionScorePrompt } from "@/components/question-score-prompt";
-import { findQuestionScoreIndex, scoreLevelShortLabel } from "@/lib/question-scoring";
+import { QuestionScoresPanel } from "@/components/question-scores-panel";
+import {
+  findQuestionScoreIndex,
+  formatQuestionScoreChatLine,
+  scoreLevelShortLabel,
+} from "@/lib/question-scoring";
 import { buildLiveQuizAgentContext } from "@/lib/quiz-summary";
 import {
   Users,
@@ -349,9 +354,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           : {}),
         ...(questionScores.length
           ? {
-              recentQuestionScores: questionScores.slice(-10).map((s) => ({
+              recentQuestionScores: questionScores.map((s) => ({
                 question: s.question,
                 score: s.score,
+                scoreLabel: scoreLevelShortLabel(s.score),
+                scoredAt: s.scoredAt,
                 ...(s.category ? { category: s.category } : {}),
               })),
             }
@@ -1047,11 +1054,53 @@ If the quiz is still in progress, note what is provisional and what to watch for
     [sendQuizStart]
   );
 
+  const notifyAgentOfQuestionScore = useCallback(
+    async (entry: QuestionScoreEntry, isUpdate: boolean) => {
+      if (!participant || participant.role !== "interviewer") return;
+      const msg = {
+        id: `msg-score-${entry.id}-${entry.scoredAt}`,
+        role: "user" as const,
+        content: formatQuestionScoreChatLine(entry),
+        senderName: participant.name,
+        timestamp: Date.now(),
+      };
+      sendChat(msg);
+      setAgentTyping(true);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...messagesLiveRef.current, msg].map((m) => ({
+              role: m.role === "agent" ? "agent" : "interviewer",
+              content: m.content,
+            })),
+            config: resolveAgentApiConfig(roomConfigLiveRef.current),
+            promptHint: isUpdate
+              ? `The interviewer updated their rating to ${entry.score}/10 (${scoreLevelShortLabel(entry.score)}) for: "${entry.question}". Briefly acknowledge the change and suggest 2–3 follow-ups calibrated to this score.`
+              : `The interviewer rated the candidate's answer ${entry.score}/10 (${scoreLevelShortLabel(entry.score)}) for: "${entry.question}". Acknowledge the score, note what it implies, and suggest 2–3 targeted follow-ups or the next best question.`,
+          }),
+        });
+        const text = await res.text();
+        if (text) {
+          const data = JSON.parse(text) as { content?: string };
+          if (data.content) sendAgentResponse(data.content);
+        }
+      } catch (err) {
+        console.error("Question-score agent notify error:", err);
+      } finally {
+        setAgentTyping(false);
+      }
+    },
+    [participant, sendChat, sendAgentResponse, resolveAgentApiConfig]
+  );
+
   const handleQuestionScore = useCallback(
     (score: number, notes?: string) => {
       if (!participant || !pendingScoreQuestion) return;
       const existingIdx = findQuestionScoreIndex(questionScores, pendingScoreQuestion);
       const existing = existingIdx >= 0 ? questionScores[existingIdx] : undefined;
+      const isUpdate = Boolean(existing);
       const entry: QuestionScoreEntry = {
         id: existing?.id ?? `qs-${Date.now()}`,
         questionId: pendingScoreQuestion.questionId,
@@ -1064,8 +1113,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
       };
       sendQuestionScore(entry);
       setPendingScoreQuestion(null);
+      void notifyAgentOfQuestionScore(entry, isUpdate);
     },
-    [participant, pendingScoreQuestion, questionScores, sendQuestionScore]
+    [participant, pendingScoreQuestion, questionScores, sendQuestionScore, notifyAgentOfQuestionScore]
   );
 
   const beginRescoreQuestion = useCallback((entry: QuestionScoreEntry) => {
@@ -1363,6 +1413,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
         report={interviewReport}
         generating={reportGenerating}
         role={participant?.role ?? "interviewer"}
+        questionScores={questionScores}
         onRetryReport={isHost ? runReportGeneration : undefined}
         sessionNotesGate={
           isHost
@@ -1877,6 +1928,14 @@ If the quiz is still in progress, note what is provisional and what to watch for
           </div>
 
           <div className="flex-1 flex flex-col min-h-0">
+            {questionScores.length > 0 && (
+              <div className="shrink-0 px-3 pt-3">
+                <QuestionScoresPanel
+                  scores={questionScores}
+                  onRescore={beginRescoreQuestion}
+                />
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
               {messages.length === 0 ? (
                 <div className="text-center text-sm text-zinc-400 mt-8">
@@ -1974,28 +2033,11 @@ If the quiz is still in progress, note what is provisional and what to watch for
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300 px-0.5">
                         Question scores ({questionScores.length})
                       </p>
-                      {[...questionScores].reverse().map((s) => (
-                        <div
-                          key={s.id}
-                          className="text-[10px] rounded border border-indigo-200/80 dark:border-indigo-900/60 px-2 py-1.5 bg-white/80 dark:bg-zinc-900/80"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="font-medium shrink-0">
-                              {s.score}/10 · {scoreLevelShortLabel(s.score)}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-1.5 text-[10px] shrink-0"
-                              onClick={() => beginRescoreQuestion(s)}
-                            >
-                              Change score
-                            </Button>
-                          </div>
-                          <p className="text-zinc-600 dark:text-zinc-400 line-clamp-2 mt-0.5">{s.question}</p>
-                        </div>
-                      ))}
+                      <QuestionScoresPanel
+                        scores={questionScores}
+                        onRescore={beginRescoreQuestion}
+                        compact
+                      />
                     </div>
                   )}
                   {availableQuestions.length === 0 ? (

@@ -80,7 +80,7 @@ export interface QuestionScoreEntry {
   questionId?: string;
   question: string;
   category?: string;
-  /** 1–5 scale (see QUESTION_SCORE_LEVELS). */
+  /** 1–10 scale (see QUESTION_SCORE_LEVELS). */
   score: number;
   scoredAt: number;
   scoredBy?: string;

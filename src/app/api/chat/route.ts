@@ -60,7 +60,13 @@ function buildSystemPrompt(config: {
   liveQuizHistory?: LiveQuizAgentContext[];
   /** Live in-room quiz currently selected in the UI (may be in progress). */
   liveQuizContext?: LiveQuizAgentContext;
-  recentQuestionScores?: { question: string; score: number; category?: string }[];
+  recentQuestionScores?: {
+    question: string;
+    score: number;
+    scoreLabel?: string;
+    category?: string;
+    scoredAt?: number;
+  }[];
   preInterviewTask?: {
     title: string;
     description: string;
@@ -156,11 +162,17 @@ ${config.transcriptInsights
   if (config.recentQuestionScores && config.recentQuestionScores.length > 0) {
     prompt += `
 
-RECENT MANUAL QUESTION SCORES (interviewer-rated):
+MANUAL QUESTION SCORES (interviewer-rated 1–10 after asking questions — authoritative; use for follow-ups):
 ${config.recentQuestionScores
-  .slice(-10)
-  .map((s, idx) => `${idx + 1}. [${s.score}/10] ${s.category ? `[${s.category}] ` : ""}${s.question}`)
-  .join("\n")}`;
+  .map(
+    (s, idx) =>
+      `${idx + 1}. [${s.score}/10${s.scoreLabel ? ` ${s.scoreLabel}` : ""}]${s.category ? ` [${s.category}]` : ""} ${s.question}${
+        s.scoredAt ? ` (scored ${new Date(s.scoredAt).toISOString()})` : ""
+      }`
+  )
+  .join("\n")}
+
+When scores are present: reference them when suggesting next questions — probe weak scores (≤5) deeply, validate strong ones (≥8) with harder variants, and avoid repeating topics already rated highly unless checking depth.`;
   }
 
   let quizReviewBehaviorHint = "";

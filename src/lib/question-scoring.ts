@@ -115,3 +115,13 @@ export function upsertQuestionScoreEntry<
   }
   return [...scores, entry];
 }
+
+/** Line posted to interviewer chat + agent context when a question is rated. */
+export function formatQuestionScoreChatLine(entry: {
+  question: string;
+  score: number;
+  category?: string;
+}): string {
+  const tag = entry.category ? ` (${entry.category})` : "";
+  return `[Manual score ${entry.score}/10 — ${scoreLevelShortLabel(entry.score)}${tag}] ${entry.question}`;
+}

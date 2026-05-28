@@ -232,7 +232,10 @@ ${truncate(transcriptTailBlock, 60_000)}`;
     }
 
     const questionScoreBlock = (questionScores ?? [])
-      .map((s) => `- [${s.category || "general"}] ${s.score}/10 — ${s.question}${s.notes ? ` (note: ${s.notes})` : ""}`)
+      .map(
+        (s) =>
+          `- [${s.category || "general"}] ${s.score}/10 — ${s.question}${s.notes ? ` (interviewer note: ${s.notes})` : ""}`
+      )
       .join("\n");
 
     let quizBlock = "(none)";
@@ -285,7 +288,7 @@ ${spokenSection}
 SPEECH INSIGHT SNIPPETS (interviewer-only per-answer analyses captured live during the session):
 ${analysisBlock || "(none)"}
 
-MANUAL QUESTION SCORES (interviewer-rated 1–5 after asking curated questions — primary signal when no transcript):
+MANUAL QUESTION SCORES (interviewer-rated 1–10 after asking curated questions — primary signal when no transcript; must appear in report):
 ${questionScoreBlock || "(none)"}
 
 LIVE QUIZ RESULTS (if a quiz was assigned during the session):
@@ -301,6 +304,7 @@ Write a structured **Markdown** report suitable for PDF export. Include:
 2. Executive summary (5–8 bullets) — note here which evidence sources were available (transcript / notes / both) so the reader knows what the report is grounded in.
 3. **Coding summary** — Use **CODING TASK ASSIGNMENT TIMELINE** above. List every distinct exercise that was opened in the shared editor during this session **in order** (or state clearly if the timeline is empty / not supplied). For **each** entry: title, language, and task type when inferable from \`source\` (e.g. \`pre-interview-task\` = take-home submission pre-loaded, \`external-pre-task\` = pasted external PRE-TASK, omitted = typical live assignment). Summarize what was asked (from the description) and **how the candidate tackled it** — reasoning, approach, struggles, and outcomes — grounded in **chat**, **spoken transcript**, **interviewer session notes**, and **speech insight snippets**. If multiple tasks were used, compare briefly how performance shifted across them. If the timeline has only one row, still write this section in full.
 3b. **Quiz summary** — If LIVE QUIZ RESULTS are present, summarize performance and notable misses.
+3c. **Verbal question scores** — If MANUAL QUESTION SCORES are present, include a table or bullet list of each question with its 1–10 score and a one-line interpretation; note patterns (strong topics vs weak).
 4. **Strengths observed** — base these on **all** available evidence: the structured transcript summary, chat, **and the interviewer session notes**. When both transcript and notes are present, cite at least one observation grounded in the notes and at least one grounded in the transcript whenever possible. Use short verbatim quotes when supported.
 5. **Gaps / risks / follow-up questions** — same evidence requirement as Strengths. Notes often surface concerns the transcript will not show (off-mic confusion, hesitation, attitude); do not omit them.
 6. **Coding depth (final editor state)** — The **FINAL CODE** block is a snapshot of the **last** active shared coding task only (not every prior exercise). Read it when present and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript/notes may show their reasoning). Quote short snippets when calling out specific issues.

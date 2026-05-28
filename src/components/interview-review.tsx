@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { FileDown, Copy, Check, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
-import type { InterviewReport } from "@/types/room";
+import type { InterviewReport, QuestionScoreEntry } from "@/types/room";
 import { downloadInterviewPdf } from "@/lib/interview-pdf";
+import { QuestionScoresPanel } from "@/components/question-scores-panel";
 
 type SessionNotesGateProps = {
   value: string;
@@ -25,6 +26,8 @@ type Props = {
   report: InterviewReport | null;
   generating: boolean;
   role: "interviewer" | "candidate";
+  /** Manual 1–10 scores from the live interview (shown on review for the panel). */
+  questionScores?: QuestionScoreEntry[];
   /** Shown when the interviewer is in review but no report is in room state yet (e.g. refresh). */
   onRetryReport?: () => void;
   /**
@@ -41,6 +44,7 @@ export function InterviewReviewPanel({
   report,
   generating,
   role,
+  questionScores = [],
   onRetryReport,
   sessionNotesGate,
 }: Props) {
@@ -89,6 +93,9 @@ export function InterviewReviewPanel({
           </div>
         </CardHeader>
         <CardContent className="pt-6">
+          {questionScores.length > 0 && role === "interviewer" && (
+            <QuestionScoresPanel scores={questionScores} className="mb-6" />
+          )}
           {generating && role === "interviewer" && (
             <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 mb-6">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
