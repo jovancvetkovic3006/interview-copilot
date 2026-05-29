@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { normalizeTranscriptAnalysisResponse } from "@/lib/transcript-analysis";
 
 const MODEL_FALLBACK_CHAIN = [
   "claude-sonnet-4-6",
@@ -130,26 +131,20 @@ Respond with ONLY valid JSON (no markdown):
       return NextResponse.json({ error: "Invalid model response" }, { status: 500 });
     }
 
-    const allowed = new Set(["strong", "adequate", "weak", "insufficient", "n/a"]);
-    const answerQuality = allowed.has(json.answerQuality) ? json.answerQuality : "n/a";
-    const score = typeof json.score === "number" && json.score >= 0 && json.score <= 10 ? json.score : 0;
-
-    const followUpQuestions =
-      answerQuality === "n/a"
-        ? []
-        : Array.isArray(json.followUpQuestions)
-          ? json.followUpQuestions
-              .filter((q): q is string => typeof q === "string")
-              .map((q) => q.trim())
-              .filter((q) => q.length > 0 && q.length <= 240)
-              .slice(0, 3)
-          : [];
+    const normalized = normalizeTranscriptAnalysisResponse(json, {
+      id: "api",
+      timestamp: Date.now(),
+      transcriptEndLength: 0,
+    });
+    if (!normalized) {
+      return NextResponse.json({ error: "Invalid model response" }, { status: 500 });
+    }
 
     return NextResponse.json({
-      summary: typeof json.summary === "string" ? json.summary : "",
-      score,
-      answerQuality,
-      followUpQuestions,
+      summary: normalized.summary,
+      score: normalized.score,
+      answerQuality: normalized.answerQuality,
+      followUpQuestions: normalized.followUpQuestions ?? [],
     });
   } catch (error: unknown) {
     console.error("analyze-transcript error:", error);

@@ -1,7 +1,28 @@
 import type { QuizTemplate } from "@/types/quiz";
 
-/** Pre-built quiz templates — up to 20 MCQ questions, 4 options each, 3 min per question at runtime. */
-export const QUIZ_TEMPLATES: QuizTemplate[] = [
+/** Short quiz for Playwright E2E (enabled via NEXT_PUBLIC_E2E_QUIZ=1 in playwright.config). */
+const E2E_SMOKE_QUIZ: QuizTemplate = {
+  id: "e2e-smoke",
+  title: "E2E Smoke Quiz",
+  track: "E2E",
+  description: "Two-question quiz for automated end-to-end tests.",
+  questions: [
+    {
+      id: "e2e-1",
+      question: "2 + 2 equals?",
+      options: ["3", "4", "5", "6"],
+      correctIndex: 1,
+    },
+    {
+      id: "e2e-2",
+      question: "HTTP GET is typically:",
+      options: ["Safe and idempotent", "Always mutating", "Only for files", "Deprecated"],
+      correctIndex: 0,
+    },
+  ],
+};
+
+const BASE_QUIZ_TEMPLATES: QuizTemplate[] = [
   {
     id: "be-senior",
     title: "Backend Senior",
@@ -297,6 +318,12 @@ export const QUIZ_TEMPLATES: QuizTemplate[] = [
     ],
   },
 ];
+
+/** Pre-built quiz templates — up to 20 MCQ questions, 4 options each, 3 min per question at runtime. */
+export const QUIZ_TEMPLATES: QuizTemplate[] =
+  process.env.NEXT_PUBLIC_E2E_QUIZ === "1"
+    ? [E2E_SMOKE_QUIZ, ...BASE_QUIZ_TEMPLATES]
+    : BASE_QUIZ_TEMPLATES;
 
 export const MAX_QUIZ_QUESTIONS = 20;
 export const DEFAULT_SECONDS_PER_QUESTION = 180;

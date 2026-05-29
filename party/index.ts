@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server";
-import { interviewDurationMinutes, nextTimeExtensionMinutes } from "@/lib/interview-deadline";
+import { interviewDurationMinutes } from "@/lib/interview-deadline";
+import { buildInterviewTimeBroadcastPayload } from "@/lib/interview-timer";
 import { upsertQuestionScoreEntry } from "@/lib/question-scoring";
 
 /** Mirrors `TranscriptAnalysisEntry` in src/types/room.ts (kept local for PartyKit bundle). */
@@ -29,7 +30,13 @@ export type RoomMessage =
       timeExtensionMinutes?: number;
     }
   | { type: "time-extension"; addMinutes: 30 | 60 }
-  | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
+  | {
+      type: "interview-time";
+      interviewStartedAt: number | null;
+      timeExtensionMinutes: number;
+      interviewEndsAt?: number;
+      minutesAdded?: 30 | 60;
+    }
   | { type: "coding-task"; task: unknown }
   | { type: "quiz-start"; quiz: unknown }
   | { type: "activate-coding-task"; collaborationTaskId: string }
@@ -425,18 +432,26 @@ export default class InterviewRoom implements Party.Server {
       }
 
       case "time-extension": {
-        if (this.state.phase !== "interview") break;
-        this.state.timeExtensionMinutes = nextTimeExtensionMinutes(
-          this.state.interviewStartedAt,
-          interviewDurationMinutes(this.state.config),
-          this.state.timeExtensionMinutes,
-          data.addMinutes
+        const now = Date.now();
+        const payload = buildInterviewTimeBroadcastPayload(
+          {
+            phase: this.state.phase,
+            interviewStartedAt: this.state.interviewStartedAt,
+            timeExtensionMinutes: this.state.timeExtensionMinutes,
+            config: this.state.config,
+          },
+          data.addMinutes,
+          now
         );
+        if (!payload || typeof payload.timeExtensionMinutes !== "number") break;
+        this.state.timeExtensionMinutes = payload.timeExtensionMinutes;
         this.room.broadcast(
           JSON.stringify({
             type: "interview-time",
             interviewStartedAt: this.state.interviewStartedAt,
-            timeExtensionMinutes: this.state.timeExtensionMinutes,
+            timeExtensionMinutes: payload.timeExtensionMinutes,
+            ...(payload.interviewEndsAt != null ? { interviewEndsAt: payload.interviewEndsAt } : {}),
+            ...(payload.minutesAdded != null ? { minutesAdded: payload.minutesAdded } : {}),
           } satisfies RoomMessage)
         );
         break;

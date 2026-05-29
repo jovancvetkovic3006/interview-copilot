@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { formatManualQuestionScoresPromptSection } from "@/lib/chat-prompt-sections";
-import { formatLiveQuizForPrompt, type LiveQuizAgentContext } from "@/lib/quiz-summary";
+import { appendCodingReviewToSystemPrompt } from "@/lib/chat-coding-prompt";
+import { appendLiveQuizToSystemPrompt } from "@/lib/chat-quiz-prompt";
+import type { LiveQuizAgentContext } from "@/lib/quiz-summary";
 
 // Model fallback chain — tries each model in order until one works
 const MODEL_FALLBACK_CHAIN = [
@@ -164,27 +166,17 @@ ${config.transcriptInsights
     prompt += formatManualQuestionScoresPromptSection(config.recentQuestionScores);
   }
 
-  let quizReviewBehaviorHint = "";
-  if (config.liveQuizHistory && config.liveQuizHistory.length > 0) {
-    prompt += `
-
-ALL LIVE QUIZZES THIS SESSION (newest last; candidate may revisit any from history):`;
-    config.liveQuizHistory.forEach((quizCtx, idx) => {
-      prompt += `\n\n--- Quiz ${idx + 1}: ${quizCtx.title} (${quizCtx.status}) ---\n${formatLiveQuizForPrompt(quizCtx)}`;
-    });
-  }
-
-  if (config.liveQuizContext) {
-    const quizCtx = config.liveQuizContext;
-    prompt += `
-
-CURRENTLY SELECTED LIVE QUIZ (multiple-choice):
-${formatLiveQuizForPrompt(quizCtx)}`;
-    quizReviewBehaviorHint = `- When the interviewer asks about the quiz (or quiz data is relevant), summarize performance, weak topics, and patterns (speed, skipped questions).
+  const quizAppend = appendLiveQuizToSystemPrompt(prompt, {
+    liveQuizHistory: config.liveQuizHistory,
+    liveQuizContext: config.liveQuizContext,
+  });
+  prompt = quizAppend.prompt;
+  const quizReviewBehaviorHint = quizAppend.includesReviewHints
+    ? `- When the interviewer asks about the quiz (or quiz data is relevant), summarize performance, weak topics, and patterns (speed, skipped questions).
 - Suggest 3-5 concrete verbal follow-up questions to probe wrong answers or validate strengths — reference specific quiz questions when useful.
 - If status is "in-progress", treat partial results as provisional and note what is still unanswered.
-- Do not reveal correct answers to the candidate; you are advising the interviewer only.`;
-  }
+- Do not reveal correct answers to the candidate; you are advising the interviewer only.`
+    : "";
 
   if (config.preInterviewTask) {
     prompt += `
@@ -243,29 +235,9 @@ ${regularTasks.map((t) => `- ${t.title} (${t.language}): ${t.description}`).join
 
   let codingReviewBehaviorHint = "";
   if (config.codingTaskSubmission) {
-    const s = config.codingTaskSubmission;
-    const fromInterviewer = s.requestedBy === "interviewer";
-    prompt += `
-
-IN-ROOM CODING TASK — REVIEW REQUEST:
-${
-  fromInterviewer
-    ? "The human interviewer shared the candidate's current solution from the live shared editor and asked you to review it. They may send again as the candidate continues to edit."
-    : "The candidate asked you to review their current solution (they may submit again while still working on the same task)."
-}
-Task title: ${s.title}
-Language: ${s.language}
-Task description:
-${s.description}
-
-Their current shared-editor code:
-\`\`\`${s.language}
-${s.code}
-\`\`\``;
-    codingReviewBehaviorHint =
-      fromInterviewer
-        ? `- The interviewer asked you to evaluate the candidate's current in-room solution (see IN-ROOM CODING TASK above). Respond with concise, actionable feedback: what works, issues, complexity, tests/edge cases, and next steps. Address the candidate directly where appropriate. Stay conversational. Do not assign a new [CODING_TASK] unless the candidate has clearly finished this exercise and you are moving on.`
-        : `- The candidate just requested feedback on their in-room coding solution (see IN-ROOM CODING TASK above). Respond with concise, actionable feedback: what works, issues, complexity, tests/edge cases, and next steps. Stay conversational. Do not assign a new [CODING_TASK] unless they have clearly finished this exercise and you are moving on.`;
+    const codingAppend = appendCodingReviewToSystemPrompt(prompt, config.codingTaskSubmission);
+    prompt = codingAppend.prompt;
+    codingReviewBehaviorHint = codingAppend.reviewHint;
   }
 
   prompt += `

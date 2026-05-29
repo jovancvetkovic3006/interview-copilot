@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { interviewDurationMinutes, nextTimeExtensionMinutes } from "./interview-deadline";
+import {
+  interviewDeadlineMs,
+  interviewDurationMinutes,
+  nextTimeExtensionMinutes,
+} from "./interview-deadline";
 
 const T0 = new Date("2026-05-28T14:00:00.000Z").getTime();
 
@@ -12,6 +16,13 @@ function remainingMinutesAfterExtension(
   const deadline = startedAt + durationMinutes * 60_000 + extensionMinutes * 60_000;
   return Math.max(0, Math.round((deadline - now) / 60_000));
 }
+
+describe("interviewDeadlineMs", () => {
+  it("combines base duration and extension from interview start", () => {
+    const start = T0;
+    expect(interviewDeadlineMs(start, 30, 15)).toBe(start + 45 * 60_000);
+  });
+});
 
 describe("interviewDurationMinutes", () => {
   it("uses configured duration when host set a valid block length", () => {

@@ -39,12 +39,26 @@ import {
   formatQuestionScoreChatLine,
   scoreLevelShortLabel,
 } from "@/lib/question-scoring";
+import {
+  buildRecentQuestionScoresForAgent,
+  buildTranscriptInsightsForAgent,
+} from "@/lib/agent-room-config";
+import { buildLiveQuizAgentPayload } from "@/lib/room-assignment";
 import { buildLiveQuizAgentContext } from "@/lib/quiz-summary";
+import {
+  buildTranscriptAnalysisWindow,
+  normalizeTranscriptAnalysisResponse,
+  shouldScheduleTranscriptAnalysis,
+  transcriptWindowReadyForApi,
+  TRANSCRIPT_ANALYSIS_DEBOUNCE_MS,
+} from "@/lib/transcript-analysis";
 import {
   buildRoomInviteUrl as buildRoomInviteUrlFromOrigin,
   formatRemainingMs,
   inviteRoleLabel,
 } from "@/lib/room-invite";
+import { deriveInterviewTimerDisplay } from "@/lib/interview-timer";
+import { hasUsableTranscript } from "@/lib/interview-report-gate";
 import { resolveActiveStep, sessionIsLive, type RoomUiStep } from "@/lib/room-step";
 import {
   Users,
@@ -67,10 +81,6 @@ import {
   Pin,
 } from "lucide-react";
 
-const TRANSCRIPT_ANALYSIS_DEBOUNCE_MS = 4000;
-const TRANSCRIPT_ANALYSIS_MIN_CHARS = 28;
-const TRANSCRIPT_ANALYSIS_GATE_CHARS = 40;
-const TRANSCRIPT_ANALYSIS_GATE_LINES = 2;
 const MIN_FINAL_NOTES_CHARS_HINT = 30;
 
 /** BCP-47 tag for Web Speech API — browser locale first, then English. */
@@ -196,6 +206,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     interviewReport,
     interviewStartedAt,
     timeExtensionMinutes,
+    interviewEndsAt,
+    lastTimeExtension,
     hostParticipantId,
     sendChat,
     sendAgentResponse,
@@ -274,17 +286,38 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       window.clearTimeout(t0);
       window.clearInterval(id);
     };
-  }, [phase, interviewStartedAt, timeExtensionMinutes]);
+  }, [phase, interviewStartedAt, timeExtensionMinutes, interviewEndsAt]);
 
   const interviewDurationMinutes = roomConfig?.duration ?? 30;
-  const plannedTotalMinutes = interviewDurationMinutes + timeExtensionMinutes;
-  const deadlineMs =
-    interviewStartedAt != null && phase === "interview"
-      ? interviewStartedAt + plannedTotalMinutes * 60 * 1000
-      : null;
-  const remainingMs = deadlineMs != null ? Math.max(0, deadlineMs - clockNow) : null;
-  const scheduleExpired =
-    Boolean(deadlineMs != null && remainingMs === 0 && phase === "interview");
+  const timerDisplay = useMemo(
+    () =>
+      deriveInterviewTimerDisplay({
+        phase,
+        clockNow,
+        interviewStartedAt,
+        interviewEndsAt,
+        timeExtensionMinutes,
+        interviewDurationMinutes,
+        lastTimeExtension,
+      }),
+    [
+      phase,
+      clockNow,
+      interviewStartedAt,
+      interviewEndsAt,
+      timeExtensionMinutes,
+      interviewDurationMinutes,
+      lastTimeExtension,
+    ]
+  );
+  const {
+    remainingMs,
+    scheduleExpired,
+    timeWasExtended,
+    plannedTotalMinutes,
+    showCandidateExtensionBanner,
+    showHostWaitingForTimeBanner,
+  } = timerDisplay;
 
   const resolveAgentApiConfig = useCallback(
     (cfg: InterviewConfig | null) => {
@@ -328,29 +361,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               })),
             }
           : {}),
-        ...(transcriptAnalyses.length
-          ? {
-              transcriptInsights: transcriptAnalyses.slice(-8).map((a) => ({
-                summary: a.summary,
-                answerQuality: a.answerQuality,
-                score: a.score,
-                ...(a.followUpQuestions?.length
-                  ? { followUpQuestions: a.followUpQuestions.slice(0, 3) }
-                  : {}),
-              })),
-            }
-          : {}),
-        ...(questionScores.length
-          ? {
-              recentQuestionScores: questionScores.map((s) => ({
-                question: s.question,
-                score: s.score,
-                scoreLabel: scoreLevelShortLabel(s.score),
-                scoredAt: s.scoredAt,
-                ...(s.category ? { category: s.category } : {}),
-              })),
-            }
-          : {}),
+        ...buildTranscriptInsightsForAgent(transcriptAnalyses),
+        ...buildRecentQuestionScoresForAgent(questionScores),
         ...(transcript.length
           ? {
               recentTranscript: transcript.slice(-80).map((e) => ({
@@ -362,31 +374,16 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               })),
             }
           : {}),
-        ...(() => {
-          const aq = activeQuiz as ActiveQuiz | null;
-          const contexts = quizHistory
-            .map((entry) => {
-              const q = entry.quiz as ActiveQuiz;
-              if (!q?.questions?.length) return null;
-              return buildLiveQuizAgentContext(q, entry.answers as QuizAnswerEntry[], {
-                submission: (entry.quizSubmission as QuizSubmission | null) ?? null,
-                candidateStarted: entry.quizCandidateStarted,
-              });
-            })
-            .filter((c): c is NonNullable<typeof c> => c != null);
-          const activeCtx =
-            aq?.questions?.length
-              ? buildLiveQuizAgentContext(aq, quizAnswers, {
-                  submission: quizSubmission,
-                  candidateStarted: quizCandidateStarted,
-                })
-              : null;
-          if (!activeCtx && contexts.length === 0) return {};
-          return {
-            ...(activeCtx ? { liveQuizContext: activeCtx } : {}),
-            ...(contexts.length ? { liveQuizHistory: contexts } : {}),
-          };
-        })(),
+        ...buildLiveQuizAgentPayload({
+          activeAssignment: "none",
+          codingTask: null,
+          activeQuiz: activeQuiz as ActiveQuiz | null,
+          quizAnswers,
+          quizCandidateStarted,
+          quizSubmission,
+          codingTaskHistory: [],
+          quizHistory,
+        }),
         collaborativeRoom: true as const,
       };
     },
@@ -490,14 +487,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
 
     const current = transcriptLiveRef.current;
     const startIdx = lastAnalyzedTranscriptLenRef.current;
-    const slice = current.slice(startIdx);
-    const windowText = slice
-      .slice(-40)
-      .map((e) => `${e.speaker}: ${e.text}`)
-      .join("\n")
-      .trim();
-
-    if (windowText.length < TRANSCRIPT_ANALYSIS_GATE_CHARS && slice.length < TRANSCRIPT_ANALYSIS_GATE_LINES) {
+    if (!shouldScheduleTranscriptAnalysis(current, startIdx)) {
       return;
     }
 
@@ -508,13 +498,8 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
 
       const t = transcriptLiveRef.current;
       const si = lastAnalyzedTranscriptLenRef.current;
-      const sl = t.slice(si);
-      const wt = sl
-        .slice(-40)
-        .map((e) => `${e.speaker}: ${e.text}`)
-        .join("\n")
-        .trim();
-      if (wt.length < TRANSCRIPT_ANALYSIS_MIN_CHARS) return;
+      const { windowText: wt } = buildTranscriptAnalysisWindow(t, si);
+      if (!transcriptWindowReadyForApi(wt)) return;
 
       analyzeInFlightRef.current = true;
       setAnalysisBusy(true);
@@ -546,32 +531,17 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
           answerQuality?: string;
           followUpQuestions?: unknown;
         };
-        if (!res.ok || data.error || typeof data.summary !== "string") return;
+        if (!res.ok || data.error) return;
 
-        const allowed = new Set(["strong", "adequate", "weak", "insufficient", "n/a"]);
-        const answerQuality = allowed.has(String(data.answerQuality))
-          ? (data.answerQuality as "strong" | "adequate" | "weak" | "insufficient" | "n/a")
-          : "n/a";
-        const score =
-          typeof data.score === "number" && data.score >= 0 && data.score <= 10 ? data.score : 0;
-        const followUpQuestions = Array.isArray(data.followUpQuestions)
-          ? data.followUpQuestions
-              .filter((q): q is string => typeof q === "string")
-              .map((q) => q.trim())
-              .filter((q) => q.length > 0)
-              .slice(0, 3)
-          : [];
         const endLen = transcriptLiveRef.current.length;
-
-        sendTranscriptAnalysis({
+        const normalized = normalizeTranscriptAnalysisResponse(data, {
           id: `ta-${Date.now()}`,
           timestamp: Date.now(),
           transcriptEndLength: endLen,
-          summary: data.summary,
-          score,
-          answerQuality,
-          followUpQuestions,
         });
+        if (!normalized) return;
+
+        sendTranscriptAnalysis(normalized);
         lastAnalyzedTranscriptLenRef.current = endLen;
       } catch (e) {
         console.error("Transcript analysis failed:", e);
@@ -1279,6 +1249,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter your name"
+                  data-testid="join-name"
                   autoFocus
                 />
               </div>
@@ -1293,7 +1264,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={!name.trim()}>
+              <Button type="submit" className="w-full" disabled={!name.trim()} data-testid="join-submit">
                 Join interview
               </Button>
             </form>
@@ -1322,7 +1293,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
         : "Waiting for the interviewer to configure and start the session...";
 
     return (
-      <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4" data-testid="waiting-to-start">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold">Waiting to start</CardTitle>
@@ -1354,7 +1325,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
                       }`}
                     >
                       {p.role}
-                      {hostParticipantId === p.id && " · host"}
+                      {hostParticipantId === p.id && (
+                        <span data-testid="participant-host-marker"> · host</span>
+                      )}
                     </Badge>
                   </div>
                 ))}
@@ -1380,7 +1353,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
         <div className="min-h-screen bg-linear-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900 flex items-center justify-center p-4">
           <Card className="w-full max-w-md">
             <CardHeader className="text-center pb-2">
-              <CardTitle className="text-xl">Thanks for participating</CardTitle>
+              <CardTitle className="text-xl" data-testid="candidate-thanks-title">Thanks for participating</CardTitle>
             </CardHeader>
             <CardContent className="text-center text-sm text-zinc-600 dark:text-zinc-400 pt-0">
               <p>We appreciate you taking the time today.</p>
@@ -1403,7 +1376,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 value: sessionReviewNotes,
                 onChange: setSessionReviewNotesPersisted,
                 minLength: MIN_FINAL_NOTES_CHARS_HINT,
-                optional: true,
+                optional: hasUsableTranscript(transcript),
               }
             : undefined
         }
@@ -1415,8 +1388,21 @@ If the quiz is still in progress, note what is provisional and what to watch for
 
   // ── Candidate view: coding task or quiz only (no AI agent chat) ──
   if (participant?.role === "candidate") {
-    const liveQuiz =
+    let liveQuiz: ActiveQuiz | null =
       effectiveAssignment === "quiz" ? (activeQuiz as ActiveQuiz | null) : null;
+    let candidateQuizAnswers = quizAnswers;
+    let candidateQuizStarted = quizCandidateStarted;
+    if (!liveQuiz?.questions?.length) {
+      const inProgress = [...quizHistory].reverse().find((h) => {
+        const q = h.quiz as ActiveQuiz;
+        return q?.questions?.length && !h.quizSubmission;
+      });
+      if (inProgress) {
+        liveQuiz = inProgress.quiz as ActiveQuiz;
+        candidateQuizAnswers = inProgress.answers as QuizAnswerEntry[];
+        candidateQuizStarted = inProgress.quizCandidateStarted;
+      }
+    }
     const codingForView =
       effectiveAssignment === "coding"
         ? (codingTask as {
@@ -1441,20 +1427,30 @@ If the quiz is still in progress, note what is provisional and what to watch for
             {phase === "interview" && interviewStartedAt != null && remainingMs != null && (
               <div
                 className={`flex items-center gap-1 text-xs tabular-nums ${
-                  scheduleExpired ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-zinc-600 dark:text-zinc-400"
+                  timeWasExtended
+                    ? "text-emerald-700 dark:text-emerald-400 font-semibold"
+                    : scheduleExpired
+                      ? "text-amber-600 dark:text-amber-400 font-semibold"
+                      : "text-zinc-600 dark:text-zinc-400"
                 }`}
               >
                 <Clock className="h-3.5 w-3.5 shrink-0" />
-                <span>{scheduleExpired ? "Time's up" : `${formatRemainingMs(remainingMs)} left`}</span>
+                <span>
+                  {timeWasExtended
+                    ? `${formatRemainingMs(remainingMs)} left`
+                    : scheduleExpired
+                      ? "Time's up"
+                      : `${formatRemainingMs(remainingMs)} left`}
+                </span>
                 <span className="text-zinc-400 font-normal">· {plannedTotalMinutes} min block</span>
               </div>
             )}
             {connected ? (
-              <span className="flex items-center gap-1 text-xs text-green-600">
+              <span className="flex items-center gap-1 text-xs text-green-600" data-testid="party-connected">
                 <Wifi className="h-3 w-3" /> Connected
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-xs text-red-500">
+              <span className="flex items-center gap-1 text-xs text-red-500" data-testid="party-disconnected">
                 <WifiOff className="h-3 w-3" /> Disconnected
               </span>
             )}
@@ -1489,9 +1485,21 @@ If the quiz is still in progress, note what is provisional and what to watch for
             )}
           </div>
         </div>
-        {phase === "interview" && scheduleExpired && (
-          <div className="px-4 py-2 text-center text-sm bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 border-b border-amber-200 dark:border-amber-900/50">
-            Scheduled time has ended. Please wait — the host can add more time or end the interview to generate the review.
+        {showCandidateExtensionBanner && lastTimeExtension && (
+          <div
+            data-testid="candidate-time-extension-banner"
+            className="px-4 py-2 text-center text-sm bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100 border-b border-emerald-200 dark:border-emerald-900/50"
+          >
+            The interviewer added {lastTimeExtension.minutes} more minutes. You have{" "}
+            {formatRemainingMs(remainingMs ?? 0)} remaining.
+          </div>
+        )}
+        {showHostWaitingForTimeBanner && (
+          <div
+            data-testid="candidate-time-up-waiting"
+            className="px-4 py-2 text-center text-sm bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 border-b border-amber-200 dark:border-amber-900/50"
+          >
+            Scheduled time has ended. Please wait — the host can add more time or end the interview.
           </div>
         )}
 
@@ -1499,13 +1507,15 @@ If the quiz is still in progress, note what is provisional and what to watch for
 
         <div className="flex-1 flex overflow-hidden min-h-0">
           {showQuiz && liveQuiz ? (
+            <div data-testid="live-quiz-panel" className="flex-1 min-h-0 flex flex-col">
             <LiveQuizPanel
               key={liveQuiz.quizId}
               quiz={liveQuiz}
               participantName={participant?.name || "Candidate"}
-              existingAnswers={quizAnswers}
+              existingAnswers={candidateQuizAnswers}
               onAnswer={sendQuizAnswer}
               onStart={sendQuizCandidateStarted}
+              forceStarted={candidateQuizStarted}
               onComplete={(answers) =>
                 sendQuizComplete({
                   answers,
@@ -1514,6 +1524,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 })
               }
             />
+            </div>
           ) : showCoding && codingForView ? (
             <CollaborativeEditor
               key={codingForView.collaborationTaskId ?? codingForView.title}
@@ -1534,7 +1545,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
               }
             />
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" data-testid="candidate-waiting-assignment">
               <MessageSquare className="h-10 w-10 text-zinc-300 mb-3" />
               <p className="text-sm text-zinc-500 max-w-sm">
                 {hasHistory
@@ -1552,7 +1563,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
   return (
     <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
       {endInterviewModalOpen && isHost && (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4" data-testid="end-interview-modal">
           <Card className="w-full max-w-lg shadow-xl">
             <CardHeader>
               <CardTitle>Final notes &amp; end interview</CardTitle>
@@ -1565,6 +1576,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 value={endInterviewNotes}
                 onChange={(e) => setEndInterviewNotes(e.target.value)}
                 rows={6}
+                data-testid="end-interview-notes"
                 placeholder="Strengths, concerns, topics covered, recommendation hints…"
                 className="w-full text-sm rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2"
               />
@@ -1575,7 +1587,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 <Button type="button" variant="outline" onClick={() => setEndInterviewModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="button" variant="destructive" onClick={() => void confirmEndInterview()}>
+                <Button type="button" variant="destructive" data-testid="confirm-end-interview" onClick={() => void confirmEndInterview()}>
                   End interview &amp; generate report
                 </Button>
               </div>
@@ -1584,7 +1596,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
         </div>
       )}
       {phase === "interview" && scheduleExpired && isHost && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" data-testid="time-up-modal">
           <Card className="w-full max-w-md shadow-xl border-zinc-200 dark:border-zinc-800">
             <CardHeader>
               <CardTitle>Scheduled time is up</CardTitle>
@@ -1593,10 +1605,10 @@ If the quiz is still in progress, note what is provisional and what to watch for
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <Button type="button" className="w-full" onClick={() => sendTimeExtension(30)}>
+              <Button type="button" className="w-full" data-testid="add-time-30" onClick={() => sendTimeExtension(30)}>
                 Add 30 minutes
               </Button>
-              <Button type="button" className="w-full" variant="secondary" onClick={() => sendTimeExtension(60)}>
+              <Button type="button" className="w-full" variant="secondary" data-testid="add-time-60" onClick={() => sendTimeExtension(60)}>
                 Add 1 hour
               </Button>
               <Button type="button" className="w-full" variant="destructive" onClick={handleEndInterview}>
@@ -1616,6 +1628,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 variant="outline"
                 size="sm"
                 className="h-8 gap-1.5 px-2.5 text-xs font-medium"
+                data-testid="invite-dropdown-btn"
                 onClick={() => setInviteDropdownOpen((o) => !o)}
                 aria-expanded={inviteDropdownOpen}
                 aria-haspopup="menu"
@@ -1632,6 +1645,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                   <button
                     type="button"
                     role="menuitem"
+                    data-testid="invite-link-candidate"
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
                     onClick={() => {
                       copyRoomInvite("candidate");
@@ -1648,6 +1662,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                   <button
                     type="button"
                     role="menuitem"
+                    data-testid="invite-link-interviewer"
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
                     onClick={() => {
                       copyRoomInvite("interviewer");
@@ -1669,15 +1684,25 @@ If the quiz is still in progress, note what is provisional and what to watch for
           {phase === "interview" && interviewStartedAt != null && remainingMs != null && (
             <div
               className={`flex items-center gap-1 text-xs tabular-nums ${
-                scheduleExpired ? "text-amber-600 dark:text-amber-400 font-semibold" : "text-zinc-600 dark:text-zinc-400"
+                timeWasExtended
+                  ? "text-emerald-700 dark:text-emerald-400 font-semibold"
+                  : scheduleExpired
+                    ? "text-amber-600 dark:text-amber-400 font-semibold"
+                    : "text-zinc-600 dark:text-zinc-400"
               }`}
             >
               <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span>{scheduleExpired ? "Time's up" : `${formatRemainingMs(remainingMs)} left`}</span>
+              <span>
+                {timeWasExtended && lastTimeExtension
+                  ? `+${lastTimeExtension.minutes} min added · ${formatRemainingMs(remainingMs)} left`
+                  : scheduleExpired
+                    ? "Time's up"
+                    : `${formatRemainingMs(remainingMs)} left`}
+              </span>
               <span className="text-zinc-400 font-normal">· {plannedTotalMinutes} min block</span>
             </div>
           )}
-          {phase === "interview" && scheduleExpired && !isHost && (
+          {showHostWaitingForTimeBanner && !isHost && (
             <span className="text-[11px] text-amber-700 dark:text-amber-300 max-w-[14rem] leading-snug">
               Waiting for host to add time or end the interview.
             </span>
@@ -1688,11 +1713,11 @@ If the quiz is still in progress, note what is provisional and what to watch for
             </Badge>
           )}
           {connected ? (
-            <span className="flex items-center gap-1 text-xs text-green-600">
+            <span className="flex items-center gap-1 text-xs text-green-600" data-testid="party-connected">
               <Wifi className="h-3 w-3" /> Connected
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-xs text-red-500">
+            <span className="flex items-center gap-1 text-xs text-red-500" data-testid="party-disconnected">
               <WifiOff className="h-3 w-3" /> Disconnected
             </span>
           )}
@@ -1731,6 +1756,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
               variant="outline"
               size="sm"
               className="border-violet-300 text-violet-800 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-200 dark:hover:bg-violet-950/50"
+              data-testid="review-candidate-code-btn"
               onClick={handleSubmitCodingForReview}
               disabled={agentTyping}
               title="Send the shared editor (candidate's current work) to the AI for feedback"
@@ -1745,6 +1771,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
               variant="outline"
               size="sm"
               className="border-indigo-300 text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-200 dark:hover:bg-indigo-950/50"
+              data-testid="review-quiz-btn"
               onClick={() => void handleReviewQuiz()}
               disabled={agentTyping}
               title="Ask the assistant to summarize quiz results and suggest follow-up questions"
@@ -1759,6 +1786,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
               variant="outline"
               size="sm"
               className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50"
+              data-testid="end-interview-btn"
               onClick={handleEndInterview}
               disabled={reportGenerating}
               title="End interview and generate AI summary for everyone"
@@ -1968,10 +1996,11 @@ If the quiz is still in progress, note what is provisional and what to watch for
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={handleChatKeyDown}
+                  data-testid="chat-input"
                   placeholder="Type a message (sends to AI agent)..."
                   className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <Button size="sm" onClick={handleSendMessage} disabled={!chatInput.trim()}>
+                <Button size="sm" data-testid="chat-send" onClick={handleSendMessage} disabled={!chatInput.trim()}>
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
@@ -2078,6 +2107,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                                       variant="ghost"
                                       size="sm"
                                       className="shrink-0 h-7 w-7 p-0 text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60"
+                                      data-testid="send-question-btn"
                                       onClick={() => handleSendQuestion(q.question, { questionId: q.id, category: q.category })}
                                       title="Send this question to chat (the agent will react)"
                                     >
@@ -2102,6 +2132,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                                       variant="ghost"
                                       size="sm"
                                       className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
+                                      data-testid="send-question-btn"
                                       onClick={() => handleSendQuestion(q.question, { questionId: q.id, category: q.category })}
                                       title="Send this question to chat"
                                     >
@@ -2122,6 +2153,8 @@ If the quiz is still in progress, note what is provisional and what to watch for
 
             <div>
               <button
+                type="button"
+                data-testid="sidebar-tasks-toggle"
                 onClick={() => setExpandedSection(expandedSection === "tasks" ? null : "tasks")}
                 className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
               >
@@ -2203,6 +2236,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                                   variant="ghost"
                                   size="sm"
                                   className="shrink-0 h-7 px-2 text-[10px] text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60"
+                                  data-testid={`assign-coding-${task.id}`}
                                   onClick={() => handleAssignTask(task)}
                                   title="Assign this task to the shared editor"
                                 >
@@ -2245,6 +2279,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                                   variant="ghost"
                                   size="sm"
                                   className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 px-2 text-[10px]"
+                                  data-testid={`assign-coding-${task.id}`}
                                   onClick={() => handleAssignTask(task)}
                                   title="Open this PRE-TASK in the shared editor with the candidate's solution"
                                 >
@@ -2281,6 +2316,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                                     variant="ghost"
                                     size="sm"
                                     className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 px-2 text-[10px]"
+                                    data-testid={`assign-coding-${task.id}`}
                                     onClick={() => handleAssignTask(task)}
                                     title="Assign this task to the editor"
                                   >
@@ -2300,6 +2336,8 @@ If the quiz is still in progress, note what is provisional and what to watch for
 
             <div>
               <button
+                type="button"
+                data-testid="sidebar-quizzes-toggle"
                 onClick={() => setExpandedSection(expandedSection === "quiz" ? null : "quiz")}
                 className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
               >
@@ -2330,6 +2368,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                           variant="ghost"
                           size="sm"
                           className="shrink-0 h-7 px-2 text-[10px]"
+                          data-testid={`assign-quiz-${t.id}`}
                           onClick={() => handleAssignQuiz(t.id)}
                         >
                           Assign
@@ -2359,6 +2398,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                         variant="outline"
                         size="sm"
                         className="w-full h-8 text-[11px] border-indigo-300 text-indigo-800 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-200"
+                        data-testid="review-quiz-btn"
                         onClick={() => void handleReviewQuiz()}
                         disabled={agentTyping}
                       >
@@ -2373,6 +2413,8 @@ If the quiz is still in progress, note what is provisional and what to watch for
 
             <div className="border-t border-zinc-200 dark:border-zinc-800">
               <button
+                type="button"
+                data-testid="sidebar-cv-toggle"
                 onClick={() => setExpandedSection(expandedSection === "cv" ? null : "cv")}
                 className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
                 title="AI-generated suggestions based on the candidate's CV (interviewer only)"

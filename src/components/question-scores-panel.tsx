@@ -26,7 +26,7 @@ export function QuestionScoresPanel({
 
   if (compact) {
     return (
-      <div className={`space-y-1 ${className}`}>
+      <div className={`space-y-1 ${className}`} data-testid="question-scores-panel">
         {ordered.map((s) => (
           <div
             key={s.id}
@@ -42,6 +42,7 @@ export function QuestionScoresPanel({
                   variant="ghost"
                   size="sm"
                   className="h-6 px-1.5 text-[10px] shrink-0"
+                  data-testid="question-rescore-btn"
                   onClick={() => onRescore(s)}
                 >
                   Change
@@ -57,6 +58,7 @@ export function QuestionScoresPanel({
 
   return (
     <div
+      data-testid="question-scores-panel"
       className={`rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/20 ${className}`}
     >
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-indigo-200/80 dark:border-indigo-900/50">
@@ -94,6 +96,7 @@ export function QuestionScoresPanel({
                 variant="ghost"
                 size="sm"
                 className="h-6 mt-1.5 px-2 text-[10px]"
+                data-testid="question-rescore-btn"
                 onClick={() => onRescore(s)}
               >
                 Change score

@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Code2, ListChecks } from "lucide-react";
+import { quizHistoryProgressLabel } from "@/lib/room-assignment";
 import type { CodingTaskHistoryEntry, QuizHistoryEntry } from "@/types/room";
 import type { ActiveQuiz } from "@/types/quiz";
 
@@ -28,16 +29,6 @@ function codingTitle(entry: CodingTaskHistoryEntry): string {
 function quizTitle(entry: QuizHistoryEntry): string {
   const q = entry.quiz as ActiveQuiz | null;
   return q?.title?.trim() || "Quiz";
-}
-
-function quizProgress(entry: QuizHistoryEntry): string {
-  const q = entry.quiz as ActiveQuiz | null;
-  const total = q?.questions?.length ?? 0;
-  const sub = entry.quizSubmission as { answers?: unknown[] } | null;
-  const answers = sub?.answers?.length ? sub.answers.length : entry.answers.length;
-  if (entry.quizSubmission) return "done";
-  if (entry.quizCandidateStarted || answers > 0) return `${answers}/${total}`;
-  return "not started";
 }
 
 export function AssignmentHistoryStrip({
@@ -71,6 +62,7 @@ export function AssignmentHistoryStrip({
               size="sm"
               variant={active ? "default" : "outline"}
               className={`h-7 text-[11px] gap-1 px-2 ${active ? "" : "bg-white dark:bg-zinc-950"}`}
+              data-testid={`coding-history-${id}`}
               onClick={() => onSelectCoding(id)}
             >
               <Code2 className="h-3 w-3 shrink-0" />
@@ -80,7 +72,7 @@ export function AssignmentHistoryStrip({
         })}
         {quizHistory.map((entry) => {
           const active = activeAssignment === "quiz" && activeQuizId === entry.quizId;
-          const prog = quizProgress(entry);
+          const prog = quizHistoryProgressLabel(entry);
           return (
             <Button
               key={`quiz-${entry.quizId}`}
@@ -88,6 +80,7 @@ export function AssignmentHistoryStrip({
               size="sm"
               variant={active ? "default" : "outline"}
               className={`h-7 text-[11px] gap-1 px-2 ${active ? "" : "bg-white dark:bg-zinc-950"}`}
+              data-testid={`quiz-history-${entry.quizId}`}
               onClick={() => onSelectQuiz(entry.quizId)}
             >
               <ListChecks className="h-3 w-3 shrink-0" />

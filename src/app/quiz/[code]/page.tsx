@@ -141,7 +141,7 @@ export default function QuizCandidatePage({ params }: { params: Promise<{ code: 
                 placeholder="Enter your name"
               />
             </div>
-            <Button type="button" className="w-full" onClick={() => setStarted(true)} disabled={!candidateName.trim()}>
+            <Button type="button" className="w-full" onClick={() => setStarted(true)} disabled={!candidateName.trim()} data-testid="async-quiz-start-btn">
               Start quiz
             </Button>
           </CardContent>
@@ -161,12 +161,14 @@ export default function QuizCandidatePage({ params }: { params: Promise<{ code: 
         </div>
       )}
       {activeQuiz && (
+        <div data-testid="live-quiz-panel" className="flex-1 min-h-0 flex flex-col">
         <LiveQuizPanel
           quiz={activeQuiz}
           participantName={candidateName}
           onAnswer={() => {}}
           onComplete={handleComplete}
         />
+        </div>
       )}
     </div>
   );

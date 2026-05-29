@@ -108,7 +108,7 @@ export default function QuizManagePage({ params }: { params: Promise<{ code: str
               {def.questions.length} questions · {def.secondsPerQuestion / 60} min each
             </p>
             {submission ? (
-              <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900 p-4">
+              <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900 p-4" data-testid="async-quiz-submitted">
                 <p className="font-medium text-green-800 dark:text-green-200 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
                   Submitted by {submission.candidateName || "candidate"}

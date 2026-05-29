@@ -267,7 +267,7 @@ export function CvSuggestionsPanel({ config, onSendQuestion, onAssignTask, onUpl
   }
 
   return (
-    <div className="px-3 pb-3 space-y-3">
+    <div className="px-3 pb-3 space-y-3" data-testid="cv-suggestions-panel">
       <div className="flex items-center justify-between gap-1.5">
         <p className="text-[11px] text-zinc-500 min-w-0 truncate">
           Private to interviewer · grounded in the uploaded CV
@@ -355,7 +355,7 @@ export function CvSuggestionsPanel({ config, onSendQuestion, onAssignTask, onUpl
       )}
 
       {data && data.questions.length > 0 && (
-        <section className="space-y-1.5">
+        <section className="space-y-1.5" data-testid="cv-suggestions-loaded">
           <h4 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 flex items-center gap-1.5">
             <FileSearch className="h-3 w-3 text-purple-500" /> Tailored questions ({data.questions.length})
           </h4>

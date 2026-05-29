@@ -1,6 +1,10 @@
 import { interviewDurationMinutes, nextTimeExtensionMinutes } from "@/lib/interview-deadline";
 import { upsertQuestionScoreEntry } from "@/lib/question-scoring";
-import type { QuestionScoreEntry } from "@/types/room";
+import type {
+  QuestionScoreEntry,
+  TranscriptAnalysisEntry,
+  TranscriptEntry,
+} from "@/types/room";
 
 export type PartyInterviewPhase = "setup" | "interview" | "review";
 
@@ -46,4 +50,31 @@ export function applyServerQuestionScore(
   entry: QuestionScoreEntry
 ): QuestionScoreEntry[] {
   return upsertQuestionScoreEntry(scores, entry);
+}
+
+/** Mirrors party/index.ts `transcript` handler append. */
+export function applyServerTranscript(
+  transcript: TranscriptEntry[],
+  entry: TranscriptEntry
+): TranscriptEntry[] {
+  return [...transcript, entry];
+}
+
+/** Mirrors party/index.ts `transcript-analysis` handler append. */
+export function applyServerTranscriptAnalysis(
+  analyses: TranscriptAnalysisEntry[],
+  analysis: TranscriptAnalysisEntry
+): TranscriptAnalysisEntry[] {
+  return [...analyses, analysis];
+}
+
+/** Attach a stable collaboration id to a coding task (party uses crypto.randomUUID). */
+export function ensureCollaborationTaskId(
+  task: unknown,
+  collaborationTaskId: string
+): unknown {
+  if (task !== null && typeof task === "object" && !Array.isArray(task)) {
+    return { ...(task as Record<string, unknown>), collaborationTaskId };
+  }
+  return task;
 }

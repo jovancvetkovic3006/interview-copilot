@@ -1,3 +1,13 @@
+/** Absolute interview end time (ms) from server-authoritative timer fields. */
+export function interviewDeadlineMs(
+  interviewStartedAt: number | null,
+  durationMinutes: number,
+  timeExtensionMinutes: number
+): number | null {
+  if (interviewStartedAt == null) return null;
+  return interviewStartedAt + (durationMinutes + timeExtensionMinutes) * 60 * 1000;
+}
+
 export function interviewDurationMinutes(config: unknown): number {
   if (config !== null && typeof config === "object" && "duration" in config) {
     const d = (config as { duration: unknown }).duration;

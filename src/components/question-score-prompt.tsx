@@ -24,7 +24,7 @@ export function QuestionScorePrompt({
   const isRescore = previousScore != null;
 
   return (
-    <div className="rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/90 dark:bg-indigo-950/30 p-3 space-y-2">
+    <div className="rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/90 dark:bg-indigo-950/30 p-3 space-y-2" data-testid="question-score-prompt">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 mb-1">
@@ -62,6 +62,7 @@ export function QuestionScorePrompt({
           <button
             key={level.value}
             type="button"
+            data-testid={`question-score-${level.value}`}
             onClick={() => onScore(level.value)}
             className={`text-left rounded-md border px-2.5 py-1.5 transition-colors ${
               previousScore === level.value

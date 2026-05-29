@@ -159,7 +159,7 @@ export default function PreTaskCandidatePage({
             <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-green-100 dark:bg-green-950 flex items-center justify-center">
               <CheckCircle2 className="h-6 w-6 text-green-600" />
             </div>
-            <CardTitle className="text-xl">Submission received</CardTitle>
+            <CardTitle className="text-xl" data-testid="pretask-submitted-title">Submission received</CardTitle>
             <CardDescription>Thanks{candidateName ? `, ${candidateName}` : ""} — your interviewer will review your code.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -204,7 +204,7 @@ export default function PreTaskCandidatePage({
               placeholder="Your name (optional)"
               className="hidden sm:block w-48 px-2.5 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <Button onClick={handleSubmit} disabled={submitting} size="sm">
+            <Button onClick={handleSubmit} disabled={submitting} size="sm" data-testid="pretask-submit-btn">
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />

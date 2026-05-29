@@ -310,7 +310,7 @@ export default function NewPreTaskPage() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full" size="lg" disabled={!canSubmit}>
+              <Button type="submit" className="w-full" size="lg" disabled={!canSubmit} data-testid="create-pretask-btn">
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />

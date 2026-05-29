@@ -65,6 +65,7 @@ export default function NewQuizPage() {
                   <button
                     key={t.id}
                     type="button"
+                    data-testid={`quiz-template-${t.id}`}
                     onClick={() => setSelectedId(t.id)}
                     className={`w-full text-left rounded-lg border p-3 transition-colors ${
                       selectedId === t.id
@@ -94,7 +95,7 @@ export default function NewQuizPage() {
               />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="button" className="w-full" onClick={handleCreate} disabled={submitting || !template}>
+            <Button type="button" className="w-full" data-testid="create-quiz-btn" onClick={handleCreate} disabled={submitting || !template}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create quiz & get share link"}
             </Button>
           </CardContent>

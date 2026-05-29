@@ -608,6 +608,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                   value={candidateName}
                   onChange={(e) => setCandidateName(e.target.value)}
                   placeholder="Enter candidate's name"
+                  data-testid="setup-candidate-name"
                   className="w-full h-10 px-3 rounded-lg border border-zinc-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </div>
@@ -646,6 +647,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                   <Button
                     variant="outline"
                     size="sm"
+                    data-testid="setup-upload-btn"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
                   >
@@ -784,6 +786,8 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                   return (
                     <button
                       key={tab.id}
+                      type="button"
+                      data-testid={`setup-prep-tab-${tab.id}`}
                       onClick={() => setPrepTab(tab.id)}
                       className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors cursor-pointer ${
                         prepTab === tab.id
@@ -845,6 +849,8 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                                 return (
                                   <button
                                     key={q.id}
+                                    type="button"
+                                    data-testid={`setup-pin-question-${q.id}`}
                                     onClick={() => toggleQuestion(q)}
                                     className={`w-full text-left p-3 rounded-lg border transition-all cursor-pointer ${
                                       isSelected
@@ -895,6 +901,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                           type="button"
                           size="sm"
                           variant="outline"
+                          data-testid="setup-external-pretask-open"
                           onClick={() => setExternalComposerOpen(true)}
                           className="shrink-0"
                         >
@@ -949,6 +956,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                       <div className="space-y-2 rounded-md border border-violet-200 dark:border-violet-900/60 bg-white dark:bg-zinc-950 p-2.5">
                         <input
                           type="text"
+                          data-testid="setup-external-pretask-title"
                           value={externalDraftTitle}
                           onChange={(e) => setExternalDraftTitle(e.target.value)}
                           placeholder="Task title (e.g. Two Sum — HackerRank)"
@@ -974,6 +982,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                           ))}
                         </div>
                         <textarea
+                          data-testid="setup-external-pretask-solution"
                           value={externalDraftSolution}
                           onChange={(e) => setExternalDraftSolution(e.target.value)}
                           placeholder="Candidate's solution (paste the code they submitted)…"
@@ -995,6 +1004,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                           <Button
                             type="button"
                             size="sm"
+                            data-testid="setup-external-pretask-add"
                             onClick={addExternalPreTask}
                             disabled={!externalDraftValid}
                           >
@@ -1267,7 +1277,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
             </span>
 
             {step < STEPS.length - 1 ? (
-              <Button onClick={nextStep} disabled={!canProceed}>
+              <Button onClick={nextStep} disabled={!canProceed} data-testid="setup-next">
                 Next
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -1277,6 +1287,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                 disabled={!isStep2Valid}
                 variant="default"
                 size="lg"
+                data-testid="setup-start"
               >
                 <Play className="h-5 w-5" />
                 Start Interview

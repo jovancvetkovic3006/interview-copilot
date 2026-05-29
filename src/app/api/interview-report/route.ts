@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { summarizeTranscript } from "@/lib/summarize-transcript";
 import {
+  formatQuizBlockForReport,
+  sanitizeCodingTaskHistoryForReport,
+} from "@/lib/interview-report-context";
+import type { ActiveQuiz, QuizAnswerEntry, QuizSubmission } from "@/types/quiz";
+import {
   buildSpokenSectionForReport,
   formatQuestionScoresForReport,
   shouldSummarizeTranscriptBeforeReport,
@@ -123,30 +128,9 @@ export async function POST(req: NextRequest) {
     const configStr = truncate(JSON.stringify(config ?? {}, null, 2), 12_000);
     const codingStr = truncate(JSON.stringify(codingTask ?? null, null, 2), 8000);
 
-    const rawHistory = Array.isArray(codingTaskHistory) ? codingTaskHistory : [];
-    const codingTaskHistorySanitized: Record<string, unknown>[] = [];
-    for (const entry of rawHistory.slice(0, 40)) {
-      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
-      const e = entry as Record<string, unknown>;
-      const title = typeof e.title === "string" ? e.title.trim() : "";
-      if (!title) continue;
-      const row: Record<string, unknown> = {
-        title: truncate(title, 400),
-        description: truncate(typeof e.description === "string" ? e.description : "", 8000),
-        language:
-          typeof e.language === "string" && e.language.trim() ? e.language.trim().slice(0, 48) : "text",
-      };
-      if (typeof e.collaborationTaskId === "string" && e.collaborationTaskId.trim()) {
-        row.collaborationTaskId = e.collaborationTaskId.trim().slice(0, 80);
-      }
-      if (typeof e.source === "string" && e.source.trim()) {
-        row.source = e.source.trim().slice(0, 80);
-      }
-      if (typeof e.recordedAt === "number" && Number.isFinite(e.recordedAt)) {
-        row.recordedAt = e.recordedAt;
-      }
-      codingTaskHistorySanitized.push(row);
-    }
+    const codingTaskHistorySanitized = sanitizeCodingTaskHistoryForReport(
+      Array.isArray(codingTaskHistory) ? codingTaskHistory : []
+    );
     const codingTaskHistoryStr = truncate(JSON.stringify(codingTaskHistorySanitized, null, 2), 100_000);
 
     // Coding task language is used as the fenced-code block hint for `finalCode` so the model
@@ -216,24 +200,11 @@ export async function POST(req: NextRequest) {
 
     const questionScoreBlock = formatQuestionScoresForReport(questionScores ?? []);
 
-    let quizBlock = "(none)";
-    const quiz = activeQuiz as { title?: string; questions?: { id: string; question: string; correctIndex: number }[] } | undefined;
-    const resolvedQuizAnswers =
-      quizSubmission?.answers?.length ? quizSubmission.answers : quizAnswers;
-    if (quiz?.questions?.length && Array.isArray(resolvedQuizAnswers) && resolvedQuizAnswers.length > 0) {
-      const lines = resolvedQuizAnswers.map((a) => {
-        const q = quiz.questions!.find((qq) => qq.id === a.questionId);
-        const skipped = a.selectedIndex < 0;
-        const correct = !skipped && q && a.selectedIndex === q.correctIndex;
-        return `- ${q?.question ?? a.questionId}: ${skipped ? "no answer / timed out" : `selected option ${a.selectedIndex + 1} (${correct ? "correct" : "incorrect"})`}`;
-      });
-      const correctCount = resolvedQuizAnswers.filter((a) => {
-        const q = quiz.questions!.find((qq) => qq.id === a.questionId);
-        return q && a.selectedIndex >= 0 && a.selectedIndex === q.correctIndex;
-      }).length;
-      const who = quizSubmission?.candidateName ? ` (${quizSubmission.candidateName})` : "";
-      quizBlock = `Quiz: ${quiz.title ?? "Live quiz"}${who}\nScore: ${correctCount}/${quiz.questions.length}\n${lines.join("\n")}`;
-    }
+    const quizBlock = formatQuizBlockForReport({
+      activeQuiz: activeQuiz as ActiveQuiz | undefined,
+      quizAnswers: quizAnswers as QuizAnswerEntry[] | undefined,
+      quizSubmission: quizSubmission as QuizSubmission | undefined,
+    });
 
     const userContent = `You are writing the official post-interview packet for the hiring panel.
 

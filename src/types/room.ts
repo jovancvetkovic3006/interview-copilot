@@ -139,7 +139,15 @@ export type RoomMessage =
   /** Client → server: host requests more scheduled time (minutes). */
   | { type: "time-extension"; addMinutes: 30 | 60 }
   /** Server → clients: authoritative interview timer fields after phase change or extension. */
-  | { type: "interview-time"; interviewStartedAt: number | null; timeExtensionMinutes: number }
+  | {
+      type: "interview-time";
+      interviewStartedAt: number | null;
+      timeExtensionMinutes: number;
+      /** Wall-clock end of the current block (preferred for countdown UI). */
+      interviewEndsAt?: number;
+      /** Present when the host just added time (30 or 60). */
+      minutesAdded?: 30 | 60;
+    }
   | { type: "coding-task"; task: unknown }
   | { type: "quiz-start"; quiz: unknown }
   | { type: "activate-coding-task"; collaborationTaskId: string }

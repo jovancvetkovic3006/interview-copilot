@@ -1,6 +1,8 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { deriveQuizResultsView } from "@/lib/quiz-results-view";
+import { resolveQuizAnswers } from "@/lib/quiz-summary";
 import type { ActiveQuiz, QuizAnswerEntry, QuizSubmission } from "@/types/quiz";
 import { CheckCircle2, XCircle, Clock, HelpCircle } from "lucide-react";
 
@@ -10,11 +12,6 @@ interface QuizResultsSummaryProps {
   submission?: QuizSubmission | null;
   /** Shown when quiz is assigned but candidate has not started yet. */
   status?: "waiting" | "in-progress" | "complete";
-}
-
-function resolveAnswers(answers: QuizAnswerEntry[], submission?: QuizSubmission | null): QuizAnswerEntry[] {
-  if (submission?.answers?.length) return submission.answers;
-  return answers;
 }
 
 function AnswerBreakdown({
@@ -72,20 +69,18 @@ function AnswerBreakdown({
 }
 
 export function QuizResultsSummary({ quiz, answers, submission, status }: QuizResultsSummaryProps) {
-  const resolved = resolveAnswers(answers, submission);
-  const total = quiz.questions.length;
+  const resolved = resolveQuizAnswers(answers, submission);
+  const view = deriveQuizResultsView(quiz, answers, { submission, status });
+  const { correct, total, percentCorrect: pct } = view;
+  const effectiveStatus = view.status;
   const answered = resolved.length;
-  const correct = resolved.filter((a) => {
-    const q = quiz.questions.find((qq) => qq.id === a.questionId);
-    return q && a.selectedIndex >= 0 && a.selectedIndex === q.correctIndex;
-  }).length;
-
-  const effectiveStatus =
-    status ?? (submission || answered >= total ? "complete" : answered > 0 ? "in-progress" : "waiting");
 
   if (effectiveStatus === "waiting") {
     return (
-      <div className="rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/25 p-3 text-xs text-indigo-900 dark:text-indigo-100">
+      <div
+        data-testid="quiz-results-waiting"
+        className="rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/25 p-3 text-xs text-indigo-900 dark:text-indigo-100"
+      >
         <div className="flex items-center gap-2 font-medium">
           <Clock className="h-3.5 w-3.5 shrink-0" />
           Quiz assigned — waiting for candidate to start
@@ -121,14 +116,15 @@ export function QuizResultsSummary({ quiz, answers, submission, status }: QuizRe
     );
   }
 
-  const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-
   return (
-    <div className="rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-white dark:bg-zinc-900/80 p-3 space-y-2">
+    <div
+      data-testid="quiz-results-complete"
+      className="rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-white dark:bg-zinc-900/80 p-3 space-y-2"
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{quiz.title}</span>
         <Badge
-          variant={pct >= 70 ? "default" : pct >= 50 ? "secondary" : "destructive"}
+          variant={view.badgeVariant}
           className="text-[10px] tabular-nums"
         >
           {correct}/{total} ({pct}%)

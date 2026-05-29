@@ -65,11 +65,18 @@ export function LiveQuizPanel({
     if (existingAnswers.length > answers.length) {
       setAnswers(existingAnswers);
       if (existingAnswers.length > 0) setHasStarted(true);
+      setCurrentIndex(
+        Math.min(existingAnswers.length, Math.max(0, quiz.questions.length - 1))
+      );
     }
-  }, [existingAnswers, answers.length]);
+  }, [existingAnswers, answers.length, quiz.questions.length]);
 
-  const currentQuestion = quiz.questions[currentIndex];
   const isDone = answers.length >= quiz.questions.length;
+  const questionIndex = Math.min(
+    Math.max(0, currentIndex),
+    Math.max(0, quiz.questions.length - 1)
+  );
+  const currentQuestion = quiz.questions[questionIndex];
 
   const submitAnswer = useCallback(
     (optionIndex: number) => {
@@ -87,7 +94,7 @@ export function LiveQuizPanel({
           completedRef.current = true;
           onComplete(next);
         } else {
-          setCurrentIndex((i) => i + 1);
+          setCurrentIndex((i) => Math.min(i + 1, quiz.questions.length - 1));
         }
         return next;
       });
@@ -129,7 +136,7 @@ export function LiveQuizPanel({
       return q && a.selectedIndex >= 0 && a.selectedIndex === q.correctIndex;
     }).length;
     return (
-      <Card className="h-full border-0 shadow-none rounded-none flex flex-col">
+      <Card className="h-full border-0 shadow-none rounded-none flex flex-col" data-testid="quiz-complete">
         <CardHeader className="text-center">
           <CheckCircle2 className="h-10 w-10 mx-auto text-green-600 mb-2" />
           <CardTitle>Quiz complete</CardTitle>
@@ -165,7 +172,7 @@ export function LiveQuizPanel({
               Take a moment to get ready. The timer starts only after you press Start — each question has its own{" "}
               {quiz.secondsPerQuestion / 60}-minute limit.
             </p>
-            <Button type="button" className="w-full" size="lg" onClick={handleStart}>
+            <Button type="button" className="w-full" size="lg" onClick={handleStart} data-testid="quiz-start-btn">
               <Play className="h-4 w-4 mr-2" />
               Start quiz
             </Button>
@@ -183,15 +190,21 @@ export function LiveQuizPanel({
     );
   }
 
-  if (!currentQuestion) return null;
+  if (!currentQuestion) {
+    return (
+      <div className="h-full flex items-center justify-center p-8 text-sm text-zinc-500" data-testid="quiz-panel-empty">
+        Loading quiz…
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-zinc-950">
+    <div className="h-full flex flex-col bg-white dark:bg-zinc-950" data-testid="quiz-question-step">
       <div className="shrink-0 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">{quiz.title}</h2>
           <p className="text-xs text-zinc-500">
-            Question {currentIndex + 1} of {quiz.questions.length}
+            Question {questionIndex + 1} of {quiz.questions.length}
           </p>
         </div>
         {!readOnly && (
@@ -211,6 +224,7 @@ export function LiveQuizPanel({
             <button
               key={idx}
               type="button"
+              data-testid={`quiz-option-${idx}`}
               disabled={readOnly}
               onClick={() => {
                 if (readOnly) return;

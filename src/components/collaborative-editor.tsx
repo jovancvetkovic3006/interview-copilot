@@ -336,7 +336,7 @@ const CollaborativeEditorInner = forwardRef<CollaborativeEditorHandle, Collabora
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" data-testid="coding-task-panel">
       {/* Task Header */}
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
         <div className="flex items-center justify-between mb-2">

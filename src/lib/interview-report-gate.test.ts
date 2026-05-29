@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasUsableTranscript } from "./interview-report-gate";
+import { hasUsableTranscript, sessionNotesMeetMinimum } from "./interview-report-gate";
 
 describe("hasUsableTranscript", () => {
   it("blocks report generation when nothing was captured", () => {
@@ -17,6 +17,17 @@ describe("hasUsableTranscript", () => {
         { text: "   " },
         { text: "Candidate explained the design clearly." },
       ])
+    ).toBe(true);
+  });
+});
+
+describe("sessionNotesMeetMinimum", () => {
+  it("matches review UI hint for optional final notes quality", () => {
+    expect(sessionNotesMeetMinimum("short")).toBe(false);
+    expect(
+      sessionNotesMeetMinimum(
+        "Candidate showed strong system design instincts and clear communication."
+      )
     ).toBe(true);
   });
 });

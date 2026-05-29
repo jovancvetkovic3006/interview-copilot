@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import PartySocket from "partysocket";
-import { nextTimeExtensionMinutes, interviewDurationMinutes } from "@/lib/interview-deadline";
+import { interviewDurationMinutes, nextTimeExtensionMinutes } from "@/lib/interview-deadline";
+import {
+  applyInterviewTimerUpdate,
+  type InterviewTimerClientState,
+} from "@/lib/interview-timer";
 import { upsertQuestionScoreEntry } from "@/lib/question-scoring";
 import {
   filterChatMessagesForRole,
@@ -33,7 +37,28 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const phaseRef = useRef<RoomState["phase"]>("setup");
   const interviewSeenRef = useRef(false);
   const interviewStartedAtRef = useRef<number | null>(null);
+  const timeExtensionMinutesRef = useRef(0);
+  const interviewEndsAtRef = useRef<number | null>(null);
+  const lastTimeExtensionRef = useRef<InterviewTimerClientState["lastTimeExtension"]>(null);
   const configRef = useRef<unknown | null>(null);
+
+  const readTimerState = (): InterviewTimerClientState => ({
+    interviewStartedAt: interviewStartedAtRef.current,
+    timeExtensionMinutes: timeExtensionMinutesRef.current,
+    interviewEndsAt: interviewEndsAtRef.current,
+    lastTimeExtension: lastTimeExtensionRef.current,
+  });
+
+  const commitTimerState = (next: InterviewTimerClientState) => {
+    interviewStartedAtRef.current = next.interviewStartedAt;
+    timeExtensionMinutesRef.current = next.timeExtensionMinutes;
+    interviewEndsAtRef.current = next.interviewEndsAt;
+    lastTimeExtensionRef.current = next.lastTimeExtension;
+    setInterviewStartedAt(next.interviewStartedAt);
+    setTimeExtensionMinutes(next.timeExtensionMinutes);
+    setInterviewEndsAt(next.interviewEndsAt);
+    setLastTimeExtension(next.lastTimeExtension);
+  };
 
   const [connected, setConnected] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -54,6 +79,13 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   const [interviewReport, setInterviewReport] = useState<InterviewReport | null>(null);
   const [interviewStartedAt, setInterviewStartedAt] = useState<number | null>(null);
   const [timeExtensionMinutes, setTimeExtensionMinutes] = useState(0);
+  /** Authoritative end time from server (keeps candidate countdown in sync with host). */
+  const [interviewEndsAt, setInterviewEndsAt] = useState<number | null>(null);
+  /** Set when host adds time — drives “interviewer added more time” UI. */
+  const [lastTimeExtension, setLastTimeExtension] = useState<{
+    at: number;
+    minutes: 30 | 60;
+  } | null>(null);
   /** First interviewer (server-elected); only the host renders the SetupForm. */
   const [hostParticipantId, setHostParticipantId] = useState<string | null>(null);
 
@@ -76,6 +108,18 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   useEffect(() => {
     interviewStartedAtRef.current = interviewStartedAt;
   }, [interviewStartedAt]);
+
+  useEffect(() => {
+    timeExtensionMinutesRef.current = timeExtensionMinutes;
+  }, [timeExtensionMinutes]);
+
+  useEffect(() => {
+    interviewEndsAtRef.current = interviewEndsAt;
+  }, [interviewEndsAt]);
+
+  useEffect(() => {
+    lastTimeExtensionRef.current = lastTimeExtension;
+  }, [lastTimeExtension]);
 
   useEffect(() => {
     configRef.current = config;
@@ -118,6 +162,15 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
       setQuizHistory(payload.quizHistory);
     };
 
+    const applyInterviewTimer = (
+      payload: Parameters<typeof applyInterviewTimerUpdate>[1],
+      configSnapshot: unknown | null
+    ) => {
+      commitTimerState(
+        applyInterviewTimerUpdate(readTimerState(), payload, configSnapshot, Date.now())
+      );
+    };
+
     socket.addEventListener("message", (event) => {
       const data = JSON.parse(event.data) as RoomMessage;
 
@@ -153,22 +206,14 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             interviewSeenRef.current = true;
           }
           setPhase(nextPhase);
-          if (typeof data.interviewStartedAt === "number") {
-            setInterviewStartedAt(data.interviewStartedAt);
-          }
-          if ("timeExtensionMinutes" in data && typeof data.timeExtensionMinutes === "number") {
-            setTimeExtensionMinutes(data.timeExtensionMinutes);
+          if ("interviewStartedAt" in data || "timeExtensionMinutes" in data) {
+            applyInterviewTimer(data, configRef.current);
           }
           break;
         }
         case "interview-time": {
-          if (typeof data.interviewStartedAt === "number") {
-            setInterviewStartedAt(data.interviewStartedAt);
-          }
-          setTimeExtensionMinutes(
-            typeof data.timeExtensionMinutes === "number" ? data.timeExtensionMinutes : 0
-          );
-          // Server only emits this during an live interview — always leave the waiting room.
+          applyInterviewTimer(data, configRef.current);
+          // Server only emits this during a live interview — always leave the waiting room.
           interviewSeenRef.current = true;
           setPhase((prev) => (prev === "setup" ? "interview" : prev));
           break;
@@ -271,10 +316,14 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
             if (typeof s.interviewStartedAt === "number") {
               setInterviewStartedAt(s.interviewStartedAt);
             }
-            if (typeof s.timeExtensionMinutes === "number") {
-              setTimeExtensionMinutes(s.timeExtensionMinutes);
-            }
             if (s.config != null) setConfig(s.config);
+            applyInterviewTimer(
+              {
+                interviewStartedAt: s.interviewStartedAt,
+                timeExtensionMinutes: s.timeExtensionMinutes,
+              },
+              s.config
+            );
             applyAssignmentState({
               activeAssignment: s.activeAssignment ?? "none",
               codingTask: s.codingTask,
@@ -330,8 +379,12 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           setInterviewStartedAt(
             typeof data.state.interviewStartedAt === "number" ? data.state.interviewStartedAt : null
           );
-          setTimeExtensionMinutes(
-            typeof data.state.timeExtensionMinutes === "number" ? data.state.timeExtensionMinutes : 0
+          applyInterviewTimer(
+            {
+              interviewStartedAt: data.state.interviewStartedAt,
+              timeExtensionMinutes: data.state.timeExtensionMinutes,
+            },
+            data.state.config
           );
           setTranscriptAnalyses(
             participantRoleRef.current !== "interviewer"
@@ -444,12 +497,24 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   }, []);
 
   const sendTimeExtension = useCallback((addMinutes: 30 | 60) => {
-    setTimeExtensionMinutes((prev) =>
-      nextTimeExtensionMinutes(
-        interviewStartedAtRef.current,
-        interviewDurationMinutes(configRef.current),
-        prev,
-        addMinutes
+    const now = Date.now();
+    const startedAt = interviewStartedAtRef.current;
+    const duration = interviewDurationMinutes(configRef.current);
+    const nextExt = nextTimeExtensionMinutes(
+      startedAt,
+      duration,
+      timeExtensionMinutesRef.current,
+      addMinutes
+    );
+    commitTimerState(
+      applyInterviewTimerUpdate(
+        readTimerState(),
+        {
+          timeExtensionMinutes: nextExt,
+          minutesAdded: addMinutes,
+        },
+        configRef.current,
+        now
       )
     );
     if (!socketRef.current) return;
@@ -513,6 +578,8 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     interviewReport,
     interviewStartedAt,
     timeExtensionMinutes,
+    interviewEndsAt,
+    lastTimeExtension,
     hostParticipantId,
     sendChat,
     sendAgentResponse,
