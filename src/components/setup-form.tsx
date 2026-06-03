@@ -5,6 +5,10 @@ import { useInterviewStore } from "@/store/interview-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  SPEECH_LANGUAGE_SETUP_OPTIONS,
+  type SpeechLanguageMode,
+} from "@/lib/speech-recognition-language";
 import type {
   Difficulty,
   InterviewConfig,
@@ -187,6 +191,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const [topics, setTopics] = useState<string[]>([]);
   const [customTopic, setCustomTopic] = useState("");
   const [duration, setDuration] = useState(30);
+  const [speechLanguage, setSpeechLanguage] = useState<SpeechLanguageMode>("sr-RS");
 
   // Step 2: Candidate
   const [candidateName, setCandidateName] = useState("");
@@ -401,6 +406,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
       difficulty,
       topics,
       duration,
+      speechLanguage,
       agentInstructions: agentInstructions.trim(),
       uploadedFiles,
       notes: candidateNotes.trim(),
@@ -593,6 +599,31 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                 <div className="flex justify-between text-xs text-zinc-500">
                   <span>15 min</span>
                   <span>90 min</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Spoken language (live transcript)</label>
+                <p className="text-xs text-zinc-500">
+                  Sets speech recognition for everyone in the room. Use Serbian when the interview is in Serbian, even if your browser UI is English.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {SPEECH_LANGUAGE_SETUP_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      data-testid={`setup-speech-lang-${opt.value}`}
+                      onClick={() => setSpeechLanguage(opt.value)}
+                      className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                        speechLanguage === opt.value
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950 ring-2 ring-blue-500"
+                          : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-700"
+                      }`}
+                    >
+                      <div className="font-medium text-sm">{opt.label}</div>
+                      <div className="text-xs text-zinc-500 mt-0.5">{opt.description}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
             </>

@@ -48,7 +48,15 @@ export function useSpeechTranscription(options: UseSpeechTranscriptionOptions = 
   }, [onTranscript]);
 
   useEffect(() => {
+    const prev = languageRef.current;
     languageRef.current = language;
+    if (prev !== language && recordingActiveRef.current) {
+      transcriptionTrace("language changed while recording — recreating recognition", {
+        from: prev,
+        to: language,
+      });
+      recreateRecognitionRef.current();
+    }
   }, [language]);
 
   const clearNetworkRetryTimer = useCallback(() => {

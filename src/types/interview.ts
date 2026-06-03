@@ -98,12 +98,16 @@ export interface ReviewTemplate {
   categories: string[];
 }
 
+import type { SpeechLanguageMode } from "@/lib/speech-recognition-language";
+
 export interface InterviewConfig {
   candidateName: string;
   role: string;
   difficulty: Difficulty;
   topics: string[];
   duration: number; // in minutes
+  /** Browser speech-to-text language for the live transcript (all participants). */
+  speechLanguage?: SpeechLanguageMode;
   agentInstructions: string;
   uploadedFiles: UploadedFile[];
   notes: string;

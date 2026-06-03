@@ -59,6 +59,10 @@ import {
 } from "@/lib/room-invite";
 import { deriveInterviewTimerDisplay } from "@/lib/interview-timer";
 import { hasUsableTranscript } from "@/lib/interview-report-gate";
+import {
+  resolveSpeechRecognitionLanguage,
+  speechLanguageDisplayLabel,
+} from "@/lib/speech-recognition-language";
 import { resolveActiveStep, sessionIsLive, type RoomUiStep } from "@/lib/room-step";
 import {
   Users,
@@ -82,14 +86,6 @@ import {
 } from "lucide-react";
 
 const MIN_FINAL_NOTES_CHARS_HINT = 30;
-
-/** BCP-47 tag for Web Speech API — browser locale first, then English. */
-function resolveSpeechRecognitionLanguage(): string {
-  if (typeof navigator !== "undefined" && navigator.language?.trim()) {
-    return navigator.language.trim();
-  }
-  return "en-US";
-}
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -616,7 +612,14 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     [sendTranscript, inviteRole]
   );
 
-  const speechLanguage = useMemo(() => resolveSpeechRecognitionLanguage(), []);
+  const speechLanguage = useMemo(
+    () => resolveSpeechRecognitionLanguage(roomConfig?.speechLanguage),
+    [roomConfig?.speechLanguage]
+  );
+  const speechLanguageLabel = useMemo(
+    () => speechLanguageDisplayLabel(speechLanguage),
+    [speechLanguage]
+  );
 
   const {
     isRecording,
@@ -1476,6 +1479,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
                   {isRecording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
                   {isRecording ? "Stop" : "Record"}
                 </Button>
+                <span className="text-[10px] text-zinc-500 text-right max-w-[18rem] leading-snug">
+                  {isRecording ? "Listening" : "STT"}: {speechLanguageLabel}
+                </span>
                 {speechNotice && (
                   <span className="text-[10px] text-amber-700 dark:text-amber-400 text-right max-w-[18rem] leading-snug break-words">
                     {speechNotice}
@@ -1812,6 +1818,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 {isRecording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
                 {isRecording ? "Stop" : "Record"}
               </Button>
+              <span className="text-[10px] text-zinc-500 text-right max-w-[18rem] leading-snug">
+                {isRecording ? "Listening" : "STT"}: {speechLanguageLabel}
+              </span>
               {speechNotice && (
                 <span className="text-[10px] text-amber-700 dark:text-amber-400 text-right max-w-[18rem] leading-snug break-words">
                   {speechNotice}
@@ -1829,12 +1838,14 @@ If the quiz is still in progress, note what is provisional and what to watch for
               <Mic className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`} />
               <span className="text-xs font-medium">Live transcript</span>
               {isRecording && <span className="text-[10px] text-red-500">● REC</span>}
-              <span className="text-[10px] text-zinc-500 ml-auto">Shared</span>
+              <span className="text-[10px] text-zinc-500 ml-auto" title="Web Speech API language">
+                {speechLanguageLabel}
+              </span>
             </div>
             <div className="flex-1 min-h-[72px] max-h-[26vh] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
               {transcript.length === 0 && !interimText ? (
                 <p className="text-zinc-400 italic leading-relaxed">
-                  Speech from the <strong>candidate</strong> and every <strong>interviewer</strong> appears here after each person taps <strong>Record</strong> on their device (own mic).
+                  Speech from the <strong>candidate</strong> and every <strong>interviewer</strong> appears here after each person taps <strong>Record</strong> on their device (own mic). Recognition language: <strong>{speechLanguageLabel}</strong> (set by host at setup).
                 </p>
               ) : (
                 transcript.slice(-30).map((entry, i) => {
