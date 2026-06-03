@@ -16,12 +16,10 @@ test.describe("Interview lobby", () => {
     await expect(page.getByRole("heading", { name: "Join Interview" })).toBeVisible();
   });
 
-  test("manual code entry routes candidate to invite page", async ({ page }) => {
+  test("lobby has no candidate code entry (candidates use invite link only)", async ({ page }) => {
     await page.goto("/interview");
-    await page.getByPlaceholder("ABC123").fill("TEST99");
-    await page.getByRole("button", { name: "Join as candidate" }).click();
-    await expect(page).toHaveURL("/invite/TEST99");
-    await expect(page.getByRole("heading", { name: "Join Interview" })).toBeVisible();
+    await expect(page.getByPlaceholder("ABC123")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Join as candidate" })).toHaveCount(0);
   });
 
   test("host and candidate can join the same room", async ({ browser }) => {

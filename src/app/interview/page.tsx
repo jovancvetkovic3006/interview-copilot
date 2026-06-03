@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -18,19 +18,10 @@ function generateRoomCode() {
 
 export default function InterviewLobbyPage() {
   const router = useRouter();
-  const [joinCode, setJoinCode] = useState("");
 
   const handleCreate = () => {
     const code = generateRoomCode();
     router.push(`/interview/${code}`);
-  };
-
-  const handleJoin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (joinCode.trim()) {
-      // Manual code entry routes through `/invite/CODE` so candidates never see a role label.
-      router.push(`/invite/${joinCode.trim().toUpperCase()}`);
-    }
   };
 
   return (
@@ -42,7 +33,7 @@ export default function InterviewLobbyPage() {
           </div>
           <CardTitle className="text-2xl font-bold">Collaborative Interview</CardTitle>
           <CardDescription>
-            Start a new interview or join an existing one to collaborate in real-time
+            Start a new interview as host. Candidates join only via the invite link you share from the room.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -52,38 +43,9 @@ export default function InterviewLobbyPage() {
               <ArrowRight className="h-4 w-4" />
             </Button>
             <p className="text-xs text-zinc-500 text-center mt-1.5">
-              Generates a shareable interview code
+              Share the candidate invite link from the room after you join
             </p>
           </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-zinc-200 dark:border-zinc-800" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white dark:bg-zinc-950 px-2 text-zinc-500">or</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleJoin} className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Interview Code</label>
-              <input
-                type="text"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-                placeholder="ABC123"
-                maxLength={6}
-              />
-            </div>
-            <Button type="submit" variant="outline" className="w-full" disabled={joinCode.trim().length < 4}>
-              Join as candidate
-            </Button>
-            <p className="text-[11px] text-zinc-500 text-center">
-              Not the candidate? Open the link your host sent you.
-            </p>
-          </form>
 
           <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
             <Link
