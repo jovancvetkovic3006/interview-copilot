@@ -1,16 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Mic, Sparkles } from "lucide-react";
 
 const COLLAPSED_W = 40;
-const MIN_PANEL_W = 200;
-const MAX_PANEL_W = 520;
+const MIN_COMBINED_W = 240;
+const MAX_COMBINED_W = 520;
 const RESIZER_W = 6;
+const DEFAULT_TRANSCRIPT_SHARE = 0.2;
+const MIN_TRANSCRIPT_SHARE = 0.1;
+const MAX_TRANSCRIPT_SHARE = 0.5;
 
-function clampWidth(w: number): number {
-  return Math.min(MAX_PANEL_W, Math.max(MIN_PANEL_W, w));
+function clampCombinedWidth(w: number): number {
+  return Math.min(MAX_COMBINED_W, Math.max(MIN_COMBINED_W, w));
+}
+
+function clampTranscriptShare(s: number): number {
+  return Math.min(MAX_TRANSCRIPT_SHARE, Math.max(MIN_TRANSCRIPT_SHARE, s));
 }
 
 type Props = {
@@ -42,6 +49,24 @@ function VerticalResizer({
   );
 }
 
+function HorizontalResizer({
+  label,
+  onMouseDown,
+}: {
+  label: string;
+  onMouseDown: () => void;
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label={label}
+      className="h-1.5 shrink-0 cursor-row-resize bg-zinc-200 hover:bg-violet-400/70 dark:bg-zinc-800 dark:hover:bg-violet-600/60 transition-colors"
+      onMouseDown={onMouseDown}
+    />
+  );
+}
+
 export function InterviewAssistantColumns({
   transcriptBody,
   insightsBody,
@@ -53,26 +78,23 @@ export function InterviewAssistantColumns({
   analysisBusy,
 }: Props) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const [transcriptW, setTranscriptW] = useState(280);
-  const [insightsW, setInsightsW] = useState(280);
+  const combinedColRef = useRef<HTMLDivElement>(null);
+  const [combinedW, setCombinedW] = useState(360);
+  const [transcriptShare, setTranscriptShare] = useState(DEFAULT_TRANSCRIPT_SHARE);
   const [transcriptCollapsed, setTranscriptCollapsed] = useState(false);
   const [insightsCollapsed, setInsightsCollapsed] = useState(false);
-  const dragRef = useRef<"ti" | "ic" | null>(null);
-
-  const insightsLeftOffset = useCallback(() => {
-    let x = transcriptCollapsed ? COLLAPSED_W : transcriptW;
-    if (!transcriptCollapsed && !insightsCollapsed) x += RESIZER_W;
-    return x;
-  }, [transcriptCollapsed, transcriptW, insightsCollapsed]);
+  const dragRef = useRef<"ts" | "cc" | null>(null);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (!dragRef.current || !rowRef.current) return;
-      const left = e.clientX - rowRef.current.getBoundingClientRect().left;
-      if (dragRef.current === "ti" && !transcriptCollapsed) {
-        setTranscriptW(clampWidth(left));
-      } else if (dragRef.current === "ic" && !insightsCollapsed) {
-        setInsightsW(clampWidth(left - insightsLeftOffset()));
+      if (!dragRef.current) return;
+      if (dragRef.current === "cc" && rowRef.current) {
+        const left = e.clientX - rowRef.current.getBoundingClientRect().left;
+        setCombinedW(clampCombinedWidth(left));
+      } else if (dragRef.current === "ts" && combinedColRef.current) {
+        const rect = combinedColRef.current.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        setTranscriptShare(clampTranscriptShare(y / rect.height));
       }
     };
     const onUp = () => {
@@ -84,26 +106,29 @@ export function InterviewAssistantColumns({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [transcriptCollapsed, insightsCollapsed, insightsLeftOffset]);
+  }, []);
+
+  const showTranscriptInsightsResizer = !transcriptCollapsed && !insightsCollapsed;
 
   return (
     <div
       ref={rowRef}
       className="flex flex-1 min-w-0 min-h-0 border-r border-zinc-200 dark:border-zinc-800"
     >
-      {/* Transcript column — STT keeps running when collapsed */}
+      {/* Transcript + insights in one column (default 20% / 80% height split) */}
       <div
-        data-testid="transcript-panel"
-        className="flex flex-col min-h-0 shrink-0 overflow-hidden bg-zinc-50/80 dark:bg-zinc-900/40 border-r border-zinc-200/80 dark:border-zinc-800"
-        style={{ width: transcriptCollapsed ? COLLAPSED_W : transcriptW }}
+        ref={combinedColRef}
+        data-testid="transcript-insights-column"
+        className="flex flex-col min-h-0 shrink-0 overflow-hidden border-r border-zinc-200/80 dark:border-zinc-800"
+        style={{ width: combinedW }}
       >
         {transcriptCollapsed ? (
-          <div className="flex flex-col items-center h-full py-2 gap-2">
+          <div className="flex items-center gap-2 px-2 py-2 border-b border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/40 shrink-0">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0"
+              className="h-7 w-7 p-0 shrink-0"
               data-testid="transcript-panel-expand"
               title="Show live transcript"
               onClick={() => setTranscriptCollapsed(false)}
@@ -111,15 +136,23 @@ export function InterviewAssistantColumns({
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Mic
-              className={`h-4 w-4 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`}
-              aria-hidden
+              className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`}
             />
+            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Transcript</span>
             {transcriptLineCount > 0 && (
-              <span className="text-[9px] font-medium text-zinc-500 tabular-nums">{transcriptLineCount}</span>
+              <span className="text-[10px] text-zinc-500 tabular-nums ml-auto">{transcriptLineCount}</span>
             )}
           </div>
         ) : (
-          <>
+          <div
+            data-testid="transcript-panel"
+            className="flex flex-col min-h-0 shrink-0 overflow-hidden bg-zinc-50/80 dark:bg-zinc-900/40"
+            style={
+              insightsCollapsed
+                ? { flex: "1 1 0" }
+                : { flex: `0 0 ${transcriptShare * 100}%` }
+            }
+          >
             <div className="px-2 py-2 flex items-center gap-1 border-b border-zinc-200/80 dark:border-zinc-800 shrink-0">
               <Button
                 type="button"
@@ -145,32 +178,25 @@ export function InterviewAssistantColumns({
               </span>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto">{transcriptBody}</div>
-          </>
+          </div>
         )}
-      </div>
 
-      {!transcriptCollapsed && !insightsCollapsed && (
-        <VerticalResizer
-          label="Resize transcript and insights panels"
-          onMouseDown={() => {
-            dragRef.current = "ti";
-          }}
-        />
-      )}
+        {showTranscriptInsightsResizer && (
+          <HorizontalResizer
+            label="Resize transcript and answer insights"
+            onMouseDown={() => {
+              dragRef.current = "ts";
+            }}
+          />
+        )}
 
-      {/* Insights column — analysis continues when collapsed */}
-      <div
-        data-testid="insights-panel"
-        className="flex flex-col min-h-0 shrink-0 overflow-hidden bg-violet-50/80 dark:bg-violet-950/30 border-r border-violet-200/60 dark:border-violet-900/50"
-        style={{ width: insightsCollapsed ? COLLAPSED_W : insightsW }}
-      >
         {insightsCollapsed ? (
-          <div className="flex flex-col items-center h-full py-2 gap-2">
+          <div className="flex items-center gap-2 px-2 py-2 border-t border-violet-200/60 dark:border-violet-900/50 bg-violet-50/80 dark:bg-violet-950/30 shrink-0 mt-auto">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0"
+              className="h-7 w-7 p-0 shrink-0"
               data-testid="insights-panel-expand"
               title="Show answer insights"
               onClick={() => setInsightsCollapsed(false)}
@@ -178,15 +204,18 @@ export function InterviewAssistantColumns({
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Sparkles
-              className={`h-4 w-4 ${analysisBusy ? "text-violet-500 animate-pulse" : "text-violet-400"}`}
-              aria-hidden
+              className={`h-3.5 w-3.5 shrink-0 ${analysisBusy ? "text-violet-500 animate-pulse" : "text-violet-400"}`}
             />
+            <span className="text-xs font-medium text-violet-800 dark:text-violet-200">Insights</span>
             {insightsCount > 0 && (
-              <span className="text-[9px] font-medium text-violet-600 tabular-nums">{insightsCount}</span>
+              <span className="text-[10px] text-violet-600 tabular-nums ml-auto">{insightsCount}</span>
             )}
           </div>
         ) : (
-          <>
+          <div
+            data-testid="insights-panel"
+            className="flex flex-col flex-1 min-h-0 overflow-hidden bg-violet-50/80 dark:bg-violet-950/30"
+          >
             <div className="px-2 py-2 flex items-center gap-1 shrink-0 border-b border-violet-200/80 dark:border-violet-900/60">
               <Button
                 type="button"
@@ -210,18 +239,16 @@ export function InterviewAssistantColumns({
               )}
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto">{insightsBody}</div>
-          </>
+          </div>
         )}
       </div>
 
-      {!insightsCollapsed && (
-        <VerticalResizer
-          label="Resize insights and chat panels"
-          onMouseDown={() => {
-            dragRef.current = "ic";
-          }}
-        />
-      )}
+      <VerticalResizer
+        label="Resize transcript/insights and chat panels"
+        onMouseDown={() => {
+          dragRef.current = "cc";
+        }}
+      />
 
       {/* Chat column */}
       <div
