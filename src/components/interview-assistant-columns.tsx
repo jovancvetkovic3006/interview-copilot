@@ -4,16 +4,17 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Mic, Sparkles } from "lucide-react";
 
-const COLLAPSED_W = 40;
-const MIN_COMBINED_W = 240;
+const MIN_COLUMN_W = 325;
 const MAX_COMBINED_W = 520;
-const RESIZER_W = 6;
+const RESIZER_PX = 6;
 const DEFAULT_TRANSCRIPT_SHARE = 0.2;
 const MIN_TRANSCRIPT_SHARE = 0.1;
 const MAX_TRANSCRIPT_SHARE = 0.5;
 
-function clampCombinedWidth(w: number): number {
-  return Math.min(MAX_COMBINED_W, Math.max(MIN_COMBINED_W, w));
+function clampCombinedWidth(w: number, rowWidth: number): number {
+  const maxCombined = Math.max(MIN_COLUMN_W, rowWidth - MIN_COLUMN_W - RESIZER_PX);
+  const effectiveMax = Math.min(MAX_COMBINED_W, maxCombined);
+  return Math.min(effectiveMax, Math.max(MIN_COLUMN_W, w));
 }
 
 function clampTranscriptShare(s: number): number {
@@ -79,7 +80,7 @@ export function InterviewAssistantColumns({
 }: Props) {
   const rowRef = useRef<HTMLDivElement>(null);
   const combinedColRef = useRef<HTMLDivElement>(null);
-  const [combinedW, setCombinedW] = useState(360);
+  const [combinedW, setCombinedW] = useState(Math.max(360, MIN_COLUMN_W));
   const [transcriptShare, setTranscriptShare] = useState(DEFAULT_TRANSCRIPT_SHARE);
   const [transcriptCollapsed, setTranscriptCollapsed] = useState(false);
   const [insightsCollapsed, setInsightsCollapsed] = useState(false);
@@ -89,8 +90,9 @@ export function InterviewAssistantColumns({
     const onMove = (e: MouseEvent) => {
       if (!dragRef.current) return;
       if (dragRef.current === "cc" && rowRef.current) {
-        const left = e.clientX - rowRef.current.getBoundingClientRect().left;
-        setCombinedW(clampCombinedWidth(left));
+        const rowRect = rowRef.current.getBoundingClientRect();
+        const left = e.clientX - rowRect.left;
+        setCombinedW(clampCombinedWidth(left, rowRect.width));
       } else if (dragRef.current === "ts" && combinedColRef.current) {
         const rect = combinedColRef.current.getBoundingClientRect();
         const y = e.clientY - rect.top;
@@ -119,8 +121,8 @@ export function InterviewAssistantColumns({
       <div
         ref={combinedColRef}
         data-testid="transcript-insights-column"
-        className="flex flex-col min-h-0 shrink-0 overflow-hidden border-r border-zinc-200/80 dark:border-zinc-800"
-        style={{ width: combinedW }}
+        className="flex flex-col min-h-0 min-w-[325px] shrink-0 overflow-hidden border-r border-zinc-200/80 dark:border-zinc-800"
+        style={{ width: combinedW, minWidth: MIN_COLUMN_W }}
       >
         {transcriptCollapsed ? (
           <div className="flex items-center gap-2 px-2 py-2 border-b border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/40 shrink-0">
@@ -253,7 +255,7 @@ export function InterviewAssistantColumns({
       {/* Chat column */}
       <div
         data-testid="chat-panel"
-        className="flex flex-col flex-1 min-w-[220px] min-h-0 overflow-hidden"
+        className="flex flex-col flex-1 min-w-[325px] min-h-0 overflow-hidden"
       >
         {chat}
       </div>
