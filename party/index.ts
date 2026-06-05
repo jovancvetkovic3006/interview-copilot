@@ -56,7 +56,13 @@ export type RoomMessage =
   | { type: "quiz-answer"; answer: unknown }
   | { type: "quiz-complete"; submission: unknown }
   | { type: "question-score"; entry: QuestionScoreEntry }
-  | { type: "transcript"; text: string; speaker: string; timestamp: number }
+  | {
+      type: "transcript";
+      text: string;
+      speaker: string;
+      speakerRole?: "interviewer" | "candidate";
+      timestamp: number;
+    }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
   | { type: "interview-report"; report: InterviewReport }
   | { type: "sync-request" }
@@ -120,7 +126,12 @@ interface RoomState {
   messages: ChatMessage[];
   config: unknown | null;
   phase: "setup" | "interview" | "review";
-  transcript: { text: string; speaker: string; timestamp: number }[];
+  transcript: {
+    text: string;
+    speaker: string;
+    speakerRole?: "interviewer" | "candidate";
+    timestamp: number;
+  }[];
   codingTask: unknown | null;
   codingTaskHistory: CodingTaskHistoryEntry[];
   activeQuiz: unknown | null;
@@ -577,6 +588,7 @@ export default class InterviewRoom implements Party.Server {
         this.state.transcript.push({
           text: data.text,
           speaker: data.speaker,
+          ...(data.speakerRole ? { speakerRole: data.speakerRole } : {}),
           timestamp: data.timestamp,
         });
         const preview =

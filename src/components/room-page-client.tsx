@@ -63,6 +63,7 @@ import {
   resolveSpeechRecognitionLanguage,
   speechLanguageDisplayLabel,
 } from "@/lib/speech-recognition-language";
+import { resolveTranscriptSpeakerLabel } from "@/lib/transcript-speaker";
 import { resolveActiveStep, sessionIsLive, type RoomUiStep } from "@/lib/room-step";
 import {
   Users,
@@ -137,7 +138,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const [chatInput, setChatInput] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
   const [showTasksPanel, setShowTasksPanel] = useState(true);
-  const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | "quiz" | "cv" | null>("questions");
+  const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | "quiz" | "cv" | null>(null);
+  const sidebarSectionsInitRef = useRef(false);
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+  const [speechStackFraction, setSpeechStackFraction] = useState(0.44);
+  const speechResizeDragRef = useRef(false);
   const [reportGenerating, setReportGenerating] = useState(false);
   const [endInterviewModalOpen, setEndInterviewModalOpen] = useState(false);
   const [endInterviewNotes, setEndInterviewNotes] = useState("");
@@ -228,6 +233,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     participant?.role === "interviewer" &&
     !!hostParticipantId &&
     hostParticipantId === participant.id;
+  const isInterviewer = participant?.role === "interviewer";
 
   const effectiveAssignment =
     activeAssignment !== "none"
@@ -364,6 +370,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               recentTranscript: transcript.slice(-80).map((e) => ({
                 speaker: e.speaker,
                 role:
+                  e.speakerRole ??
                   participants.find((p) => p.name === e.speaker)?.role ??
                   (e.speaker === candidateName ? "candidate" : "interviewer"),
                 text: e.text,
@@ -430,6 +437,33 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     transcriptLiveRef.current = transcript;
     messagesLiveRef.current = messages;
   }, [transcript, messages]);
+
+  useEffect(() => {
+    if (sidebarSectionsInitRef.current || !roomConfig) return;
+    sidebarSectionsInitRef.current = true;
+    const hasCv = roomConfig.uploadedFiles?.some(
+      (f) => (f.type === "cv" || f.type === "bio") && f.text.trim().length > 50
+    );
+    setExpandedSection(hasCv ? "cv" : null);
+  }, [roomConfig]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!speechResizeDragRef.current || !leftColumnRef.current) return;
+      const rect = leftColumnRef.current.getBoundingClientRect();
+      const y = (e.clientY - rect.top) / rect.height;
+      setSpeechStackFraction(Math.min(0.72, Math.max(0.28, y)));
+    };
+    const onUp = () => {
+      speechResizeDragRef.current = false;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   useEffect(() => {
     roomConfigLiveRef.current = roomConfig;
@@ -603,13 +637,13 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      const p = participantLiveRef.current;
-      const speaker =
-        p?.name?.trim() ||
-        (inviteRole === "candidate" ? "Candidate" : "Interviewer");
-      sendTranscript(trimmed, speaker);
+      const { speaker, speakerRole } = resolveTranscriptSpeakerLabel(
+        participantLiveRef.current,
+        roomConfigLiveRef.current?.candidateName
+      );
+      sendTranscript(trimmed, speaker, speakerRole);
     },
-    [sendTranscript, inviteRole]
+    [sendTranscript]
   );
 
   const speechLanguage = useMemo(
@@ -1012,21 +1046,23 @@ If the quiz is still in progress, note what is provisional and what to watch for
   const notifyAgentOfQuestionScore = useCallback(
     async (entry: QuestionScoreEntry, isUpdate: boolean) => {
       if (!participant || participant.role !== "interviewer") return;
-      const msg = {
-        id: `msg-score-${entry.id}-${entry.scoredAt}`,
-        role: "user" as const,
-        content: formatQuestionScoreChatLine(entry),
-        senderName: participant.name,
-        timestamp: Date.now(),
-      };
-      sendChat(msg);
+      const scoreLine = formatQuestionScoreChatLine(entry);
       setAgentTyping(true);
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: [...messagesLiveRef.current, msg].map((m) => ({
+            messages: [
+              ...messagesLiveRef.current,
+              {
+                id: `msg-score-${entry.id}-${entry.scoredAt}`,
+                role: "user" as const,
+                content: scoreLine,
+                senderName: participant.name,
+                timestamp: Date.now(),
+              },
+            ].map((m) => ({
               role: m.role === "agent" ? "agent" : "interviewer",
               content: m.content,
             })),
@@ -1047,7 +1083,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
         setAgentTyping(false);
       }
     },
-    [participant, sendChat, sendAgentResponse, resolveAgentApiConfig]
+    [participant, sendAgentResponse, resolveAgentApiConfig]
   );
 
   const handleQuestionScore = useCallback(
@@ -1208,10 +1244,10 @@ If the quiz is still in progress, note what is provisional and what to watch for
   ]);
 
   const handleEndInterview = useCallback(() => {
-    if (!isHost) return;
+    if (!isInterviewer) return;
     setEndInterviewNotes(sessionReviewNotes);
     setEndInterviewModalOpen(true);
-  }, [isHost, sessionReviewNotes]);
+  }, [isInterviewer, sessionReviewNotes]);
 
   const confirmEndInterview = useCallback(async () => {
     setEndInterviewModalOpen(false);
@@ -1568,7 +1604,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
   // ── Interviewer view ──
   return (
     <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
-      {endInterviewModalOpen && isHost && (
+      {endInterviewModalOpen && isInterviewer && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4" data-testid="end-interview-modal">
           <Card className="w-full max-w-lg shadow-xl">
             <CardHeader>
@@ -1601,7 +1637,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
           </Card>
         </div>
       )}
-      {phase === "interview" && scheduleExpired && isHost && (
+      {phase === "interview" && scheduleExpired && isInterviewer && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" data-testid="time-up-modal">
           <Card className="w-full max-w-md shadow-xl border-zinc-200 dark:border-zinc-800">
             <CardHeader>
@@ -1786,7 +1822,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
               Review quiz
             </Button>
           )}
-          {isHost && phase === "interview" && (
+          {isInterviewer && phase === "interview" && (
             <Button
               type="button"
               variant="outline"
@@ -1832,8 +1868,15 @@ If the quiz is still in progress, note what is provisional and what to watch for
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
-        <div className="w-95 min-w-80 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0">
-          <div className="flex-none flex flex-col border-b border-zinc-200 dark:border-zinc-800 max-h-[30vh] min-h-[112px] shrink-0 bg-zinc-50/80 dark:bg-zinc-900/40">
+        <div
+          ref={leftColumnRef}
+          className="w-95 min-w-80 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0"
+        >
+          <div
+            className="flex flex-col min-h-0 overflow-hidden"
+            style={{ flex: `${speechStackFraction} 1 0%` }}
+          >
+            <div className="flex-1 flex flex-col min-h-0 bg-zinc-50/80 dark:bg-zinc-900/40 border-b border-zinc-200/80 dark:border-zinc-800">
             <div className="px-3 py-2 flex items-center gap-1.5 border-b border-zinc-200/80 dark:border-zinc-800 shrink-0">
               <Mic className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`} />
               <span className="text-xs font-medium">Live transcript</span>
@@ -1842,14 +1885,14 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 {speechLanguageLabel}
               </span>
             </div>
-            <div className="flex-1 min-h-[72px] max-h-[26vh] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+            <div className="flex-1 min-h-[72px] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
               {transcript.length === 0 && !interimText ? (
                 <p className="text-zinc-400 italic leading-relaxed">
                   Speech from the <strong>candidate</strong> and every <strong>interviewer</strong> appears here after each person taps <strong>Record</strong> on their device (own mic). Recognition language: <strong>{speechLanguageLabel}</strong> (set by host at setup).
                 </p>
               ) : (
                 transcript.slice(-30).map((entry, i) => {
-                  const lineRole = speakerRoleByName.get(entry.speaker);
+                  const lineRole = entry.speakerRole ?? speakerRoleByName.get(entry.speaker);
                   const isCandidateLine =
                     lineRole === "candidate" || entry.speaker === "Candidate";
                   const isInterviewerLine = lineRole === "interviewer";
@@ -1880,9 +1923,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 </div>
               )}
             </div>
-          </div>
+            </div>
 
-          <div className="flex-none flex flex-col border-b border-zinc-200 dark:border-zinc-800 max-h-[32vh] min-h-[100px] shrink-0 bg-violet-50/80 dark:bg-violet-950/30">
+            <div className="flex-1 flex flex-col min-h-0 bg-violet-50/80 dark:bg-violet-950/30">
             <div className="px-3 py-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 shrink-0 border-b border-violet-200/80 dark:border-violet-900/60">
               <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
               <span className="text-xs font-medium text-violet-900 dark:text-violet-100">Answer insights (speech)</span>
@@ -1891,7 +1934,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 <span className="text-[10px] text-violet-600 dark:text-violet-400 ml-auto animate-pulse">Analyzing…</span>
               )}
             </div>
-            <div className="flex-1 min-h-[72px] max-h-[28vh] overflow-y-auto p-3 space-y-2">
+            <div className="flex-1 min-h-[72px] overflow-y-auto p-3 space-y-2">
               {transcriptAnalyses.length === 0 && !analysisBusy ? (
                 <p className="text-xs text-violet-800/75 dark:text-violet-200/75 italic leading-relaxed">
                   When anyone records (candidate or interviewers), the host&apos;s client analyzes the latest transcript window — candidate answer quality, context from all panel speech, and follow-up ideas.
@@ -1946,15 +1989,41 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 ))
               )}
             </div>
+            </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-h-0">
-            {questionScores.length > 0 && (
-              <div className="shrink-0 px-3 pt-3">
-                <QuestionScoresPanel
-                  scores={questionScores}
-                  onRescore={beginRescoreQuestion}
-                />
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize transcript and chat panels"
+            className="h-1.5 shrink-0 cursor-row-resize bg-zinc-200 hover:bg-blue-400/70 dark:bg-zinc-800 dark:hover:bg-blue-600/60 transition-colors"
+            onMouseDown={() => {
+              speechResizeDragRef.current = true;
+            }}
+          />
+
+          <div className="flex flex-col min-h-0 overflow-hidden" style={{ flex: `${1 - speechStackFraction} 1 0%` }}>
+            {(pendingScoreQuestion || questionScores.length > 0) && (
+              <div
+                className="shrink-0 border-b border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 space-y-2 max-h-[40%] overflow-y-auto"
+                data-testid="question-scores-dock"
+              >
+                {pendingScoreQuestion && (
+                  <QuestionScorePrompt
+                    question={pendingScoreQuestion.question}
+                    category={pendingScoreQuestion.category}
+                    previousScore={pendingExistingScore?.score}
+                    onScore={(score) => handleQuestionScore(score)}
+                    onDismiss={() => setPendingScoreQuestion(null)}
+                  />
+                )}
+                {questionScores.length > 0 && (
+                  <QuestionScoresPanel
+                    scores={questionScores}
+                    onRescore={beginRescoreQuestion}
+                    compact
+                  />
+                )}
               </div>
             )}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
@@ -1965,7 +2034,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
                   <p className="mt-1 text-xs">Send a message to start the interview conversation</p>
                 </div>
               ) : (
-                messages.map((msg) => (
+                messages
+                  .filter((msg) => !msg.content.trimStart().startsWith("[Manual score"))
+                  .map((msg) => (
                   <div
                     key={msg.id}
                     className={`flex flex-col ${msg.role === "agent" ? "items-start" : "items-end"}`}
@@ -2041,27 +2112,6 @@ If the quiz is still in progress, note what is provisional and what to watch for
               </button>
               {expandedSection === "questions" && (
                 <div className="px-3 pb-3 space-y-3">
-                  {pendingScoreQuestion && (
-                    <QuestionScorePrompt
-                      question={pendingScoreQuestion.question}
-                      category={pendingScoreQuestion.category}
-                      previousScore={pendingExistingScore?.score}
-                      onScore={(score) => handleQuestionScore(score)}
-                      onDismiss={() => setPendingScoreQuestion(null)}
-                    />
-                  )}
-                  {questionScores.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300 px-0.5">
-                        Question scores ({questionScores.length})
-                      </p>
-                      <QuestionScoresPanel
-                        scores={questionScores}
-                        onRescore={beginRescoreQuestion}
-                        compact
-                      />
-                    </div>
-                  )}
                   {availableQuestions.length === 0 ? (
                     <p className="text-xs text-zinc-400 px-1">No questions available for this role.</p>
                   ) : (
@@ -2435,7 +2485,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 CV insights
                 <Badge variant="secondary" className="ml-1 text-[9px] py-0 px-1.5 font-normal">private</Badge>
               </button>
-              {expandedSection === "cv" && (
+              <div className={expandedSection === "cv" ? undefined : "hidden"}>
                 <CvSuggestionsPanel
                   config={roomConfig}
                   onSendQuestion={handleSendQuestion}
@@ -2448,10 +2498,6 @@ If the quiz is still in progress, note what is provisional and what to watch for
                     })
                   }
                   onUploadFile={(file) => {
-                    // Mid-interview CV/bio upload — append to the shared config and broadcast so
-                    // every host's panel re-fetches tailored suggestions and the chat agent picks
-                    // the new document up on its next /api/chat turn (which always reads from the
-                    // latest roomConfig.uploadedFiles via resolveAgentApiConfig).
                     if (!roomConfig) return;
                     const updated: InterviewConfig = {
                       ...roomConfig,
@@ -2460,7 +2506,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                     sendConfig(updated);
                   }}
                 />
-              )}
+              </div>
             </div>
           </div>
         )}

@@ -28,6 +28,7 @@ export interface ChatMessage {
 export interface TranscriptEntry {
   text: string;
   speaker: string;
+  speakerRole?: Participant["role"];
   timestamp: number;
 }
 
@@ -167,7 +168,13 @@ export type RoomMessage =
   | { type: "quiz-answer"; answer: unknown }
   | { type: "quiz-complete"; submission: unknown }
   | { type: "question-score"; entry: QuestionScoreEntry }
-  | { type: "transcript"; text: string; speaker: string; timestamp: number }
+  | {
+      type: "transcript";
+      text: string;
+      speaker: string;
+      speakerRole?: Participant["role"];
+      timestamp: number;
+    }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
   | { type: "interview-report"; report: InterviewReport }
   | { type: "sync-request" }

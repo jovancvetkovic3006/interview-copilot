@@ -275,7 +275,12 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           });
           setTranscript((prev) => [
             ...prev,
-            { text: data.text, speaker: data.speaker, timestamp: data.timestamp },
+            {
+              text: data.text,
+              speaker: data.speaker,
+              ...(data.speakerRole ? { speakerRole: data.speakerRole } : {}),
+              timestamp: data.timestamp,
+            },
           ]);
           break;
         }
@@ -523,8 +528,14 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     );
   }, []);
 
-  const sendTranscript = useCallback((text: string, speaker: string) => {
-    const entry = { text, speaker, timestamp: Date.now() };
+  const sendTranscript = useCallback(
+    (text: string, speaker: string, speakerRole?: Participant["role"]) => {
+    const entry = {
+      text,
+      speaker,
+      timestamp: Date.now(),
+      ...(speakerRole ? { speakerRole } : {}),
+    };
     const preview = text.length > 120 ? `${text.slice(0, 120)}…` : text;
     transcriptionTrace("sendTranscript (local + optional wire)", {
       speaker,
@@ -539,7 +550,8 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     socketRef.current.send(
       JSON.stringify({ type: "transcript", ...entry } satisfies RoomMessage)
     );
-  }, []);
+  },
+  []);
 
   const sendTranscriptAnalysis = useCallback((analysis: TranscriptAnalysisEntry) => {
     if (!socketRef.current) return;

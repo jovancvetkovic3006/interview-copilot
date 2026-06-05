@@ -21,6 +21,7 @@ describe("coding review agent flow", () => {
     expect(prompt).toContain("IN-ROOM CODING TASK");
     expect(prompt).toContain("twoSum");
     expect(prompt).toContain("interviewer shared");
+    expect(prompt).toContain("pseudocode");
     expect(includesReviewHints).toBe(true);
   });
 
@@ -35,7 +36,8 @@ describe("coding review agent flow", () => {
 
   it("exposes behavior hint for system prompt footer", () => {
     const hint = codingReviewBehaviorHint({ ...submission, requestedBy: "interviewer" });
-    expect(hint).toContain("evaluate the candidate");
+    expect(hint).toContain("logic and approach");
+    expect(hint).toContain("not language syntax");
     expect(hint).toContain("Do not assign a new [CODING_TASK]");
   });
 });

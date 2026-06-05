@@ -8,7 +8,7 @@ test.describe("Manual question score (E2E)", () => {
 
     await sendQuestionAndScore(host, 8);
 
-    await expect(host.getByText("[Manual score 8/10").first()).toBeVisible({ timeout: 20_000 });
+    await expect(host.getByTestId("question-scores-dock")).toContainText("8/10", { timeout: 15_000 });
     await expect(host.getByText("Next best question").first()).toBeVisible({ timeout: 20_000 });
 
     await host.close();

@@ -59,6 +59,17 @@ function hasCvDocs(files: UploadedFile[] | undefined): boolean {
   return !!files?.some((f) => (f.type === "cv" || f.type === "bio") && f.text?.trim().length > 50);
 }
 
+/** Session cache so collapse/re-expand does not re-call /api/cv-suggestions. */
+const cvSuggestionsSessionCache = new Map<string, CvSuggestionsResponse>();
+
+function buildCvSuggestionsCacheKey(config: InterviewConfig): string {
+  const files = (config.uploadedFiles ?? [])
+    .filter((f) => (f.type === "cv" || f.type === "bio") && f.text?.trim().length > 50)
+    .map((f) => `${f.id}:${f.text.length}`)
+    .join("|");
+  return `${config.candidateName}|${config.role}|${config.difficulty}|${files}`;
+}
+
 /**
  * Generates a short id for an UploadedFile. Prefers `crypto.randomUUID` (browsers + modern Node)
  * and falls back to a timestamp+random suffix in older runtimes (Safari < 15.4 etc).
@@ -172,11 +183,15 @@ export function CvSuggestionsPanel({ config, onSendQuestion, onAssignTask, onUpl
       const body = (await res.json()) as CvSuggestionsResponse;
       // Guard against a stale response winning over a newer click.
       if (myReqId !== requestIdRef.current) return;
-      setData({
+      const normalized = {
         questions: body.questions ?? [],
         codingTasks: body.codingTasks ?? [],
         topicsToProbe: body.topicsToProbe ?? [],
-      });
+      };
+      if (config) {
+        cvSuggestionsSessionCache.set(buildCvSuggestionsCacheKey(config), normalized);
+      }
+      setData(normalized);
     } catch (err: unknown) {
       if (myReqId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load suggestions");
@@ -185,11 +200,18 @@ export function CvSuggestionsPanel({ config, onSendQuestion, onAssignTask, onUpl
     }
   }, [config, cvAvailable]);
 
-  // Auto-fetch the very first time the section is expanded (mounted) and CV is available.
-  // `load()` mutates state, so we defer it out of the render commit phase via `queueMicrotask`
-  // (and use a cancel flag for cleanup) to satisfy the React `set-state-in-effect` rule.
+  const cacheKey = config && cvAvailable ? buildCvSuggestionsCacheKey(config) : "";
+
+  // Auto-fetch once per CV fingerprint; reuse session cache on collapse/re-expand.
   useEffect(() => {
-    if (data || loading || error || !cvAvailable) return;
+    if (!cvAvailable || !config || !cacheKey) return;
+    const cached = cvSuggestionsSessionCache.get(cacheKey);
+    if (cached) {
+      setData(cached);
+      setError(null);
+      return;
+    }
+    if (data || loading || error) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) void load();
@@ -197,7 +219,7 @@ export function CvSuggestionsPanel({ config, onSendQuestion, onAssignTask, onUpl
     return () => {
       cancelled = true;
     };
-  }, [data, loading, error, cvAvailable, load]);
+  }, [cacheKey, cvAvailable, config, data, loading, error, load]);
 
   // Reusable compact upload form — same controls in the empty state and in the "add another"
   // panel under the header. Only rendered when the parent supplied `onUploadFile`.
