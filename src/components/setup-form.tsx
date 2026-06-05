@@ -24,13 +24,20 @@ import {
   REVIEW_TEMPLATES,
 } from "@/data/presets";
 import {
-  buildCodingTaskGroups,
-  buildQuestionGroups,
+  buildCodingTaskGroupsForRoles,
+  buildQuestionGroupsForRoles,
   filterGroupsByQuery,
   flattenGroups,
   questionSearchableText,
   taskSearchableText,
 } from "@/data/preset-helpers";
+import {
+  getInstructionsForRole,
+  getInstructionsForRoles,
+  getSuggestedTopicsForRoles,
+  PRESET_ROLES,
+} from "@/data/role-config";
+import { formatInterviewRoleLabel } from "@/lib/interview-roles";
 import {
   Play,
   X,
@@ -54,107 +61,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { PreTaskNotFoundError, getPreTask } from "@/lib/pretask-client";
-
-const ROLE_CONFIG: Record<string, { topics: string[]; instructions: string }> = {
-  "Frontend Developer": {
-    topics: ["React", "TypeScript", "CSS", "Performance", "Testing", "Accessibility"],
-    instructions: `You are a Frontend Developer interviewer. Focus on:
-- UI component architecture and state management patterns
-- CSS layout techniques, responsive design, and browser compatibility
-- JavaScript/TypeScript fundamentals and async patterns
-- Performance optimization (bundle size, rendering, lazy loading)
-- Accessibility standards (WCAG, ARIA, semantic HTML)
-- Testing strategies (unit, integration, E2E)
-- Assign a coding task involving a React component or DOM manipulation`,
-  },
-  "Backend Developer": {
-    topics: ["Node.js", "Databases", "REST APIs", "Authentication", "Microservices", "Caching"],
-    instructions: `You are a Backend Developer interviewer. Focus on:
-- API design (REST, GraphQL) and HTTP fundamentals
-- Database design, SQL queries, indexing, and optimization
-- Authentication/authorization patterns (JWT, OAuth, sessions)
-- Microservices architecture and inter-service communication
-- Caching strategies (Redis, CDN, in-memory)
-- Error handling, logging, and monitoring
-- Assign a coding task involving an API endpoint or data processing`,
-  },
-  "Full Stack Developer": {
-    topics: ["React", "Node.js", "Databases", "TypeScript", "APIs", "DevOps"],
-    instructions: `You are a Full Stack Developer interviewer. Focus on:
-- End-to-end feature development from UI to database
-- Frontend frameworks (React/Vue/Angular) and backend frameworks (Express/Nest)
-- Database modeling and API design
-- Authentication flows across client and server
-- Deployment, CI/CD basics, and environment management
-- How they debug issues across the full stack
-- Assign a coding task that touches both frontend and backend logic`,
-  },
-  "Android Developer": {
-    topics: ["Kotlin", "Jetpack Compose", "Android SDK", "MVVM", "Room", "Coroutines"],
-    instructions: `You are an Android Developer interviewer. Focus on:
-- Kotlin language features and best practices
-- Android app architecture (MVVM, MVI, Clean Architecture)
-- Jetpack Compose vs XML layouts
-- Activity/Fragment lifecycle and navigation
-- Room database, Retrofit, and data layer patterns
-- Coroutines and Flow for async operations
-- Testing on Android (unit tests, UI tests, Espresso)
-- Assign a coding task involving Kotlin logic or a Compose UI component`,
-  },
-  "iOS Developer": {
-    topics: ["Swift", "SwiftUI", "UIKit", "Combine", "Core Data", "Concurrency"],
-    instructions: `You are an iOS Developer interviewer. Focus on:
-- Swift language features (protocols, generics, optionals, value vs reference types)
-- SwiftUI vs UIKit and when to use each
-- App architecture (MVVM, Coordinator, TCA)
-- Combine and async/await concurrency patterns
-- Core Data, networking, and data persistence
-- Memory management and ARC
-- Testing strategies (XCTest, snapshot tests)
-- Assign a coding task involving Swift logic or a SwiftUI view`,
-  },
-  "QA Engineer": {
-    topics: ["Test Strategy", "Automation", "Selenium", "API Testing", "CI/CD", "Bug Reporting"],
-    instructions: `You are a QA Engineer interviewer. Focus on:
-- Test planning, test case design, and test strategy
-- Manual vs automated testing and when to use each
-- Test automation frameworks (Selenium, Cypress, Playwright, Appium)
-- API testing (Postman, REST Assured) and contract testing
-- Performance and load testing basics
-- Bug reporting, reproduction steps, and severity classification
-- Integration with CI/CD pipelines
-- Assign a task: write test cases for a given feature or write an automation script`,
-  },
-  "DevOps Engineer": {
-    topics: ["CI/CD", "Docker", "Kubernetes", "AWS", "Monitoring", "Infrastructure as Code"],
-    instructions: `You are a DevOps Engineer interviewer. Focus on:
-- CI/CD pipeline design and tooling (GitHub Actions, Jenkins, GitLab CI)
-- Containerization (Docker) and orchestration (Kubernetes)
-- Cloud platforms (AWS/GCP/Azure) and core services
-- Infrastructure as Code (Terraform, Pulumi, CloudFormation)
-- Monitoring, alerting, and observability (Prometheus, Grafana, ELK)
-- Networking fundamentals, DNS, load balancing, and security
-- Incident response and reliability practices
-- Assign a task: design a deployment pipeline or write a Dockerfile/K8s manifest`,
-  },
-  "Data Engineer": {
-    topics: ["SQL", "Python", "ETL", "Data Modeling", "Spark", "Airflow"],
-    instructions: `You are a Data Engineer interviewer. Focus on:
-- SQL proficiency (complex queries, window functions, optimization)
-- ETL/ELT pipeline design and orchestration (Airflow, Dagster)
-- Data modeling (star schema, snowflake, normalization)
-- Big data processing (Spark, Flink, Kafka)
-- Data quality, validation, and monitoring
-- Cloud data platforms (Snowflake, BigQuery, Redshift)
-- Assign a coding task involving SQL queries or a Python data transformation`,
-  },
-};
-
-const ROLES = Object.keys(ROLE_CONFIG);
-
-function getInstructionsForRole(role: string): string {
-  return ROLE_CONFIG[role]?.instructions ?? ROLE_CONFIG[ROLES[0]].instructions;
-}
 
 const DIFFICULTIES: { value: Difficulty; label: string; description: string }[] = [
   { value: "junior", label: "Junior", description: "0-2 years experience" },
@@ -185,7 +91,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const [step, setStep] = useState(0);
 
   // Step 1: Interview Setup
-  const [role, setRole] = useState(ROLES[0]);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([PRESET_ROLES[0]]);
   const [customRole, setCustomRole] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("mid");
   const [topics, setTopics] = useState<string[]>([]);
@@ -202,7 +108,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   const [uploadFileType, setUploadFileType] = useState<UploadedFile["type"]>("cv");
 
   // Step 3: Agent
-  const [agentInstructions, setAgentInstructions] = useState(getInstructionsForRole(ROLES[0]));
+  const [agentInstructions, setAgentInstructions] = useState(getInstructionsForRoles([PRESET_ROLES[0]]));
   const [isCustomInstructions, setIsCustomInstructions] = useState(false);
   const [showEditInstructions, setShowEditInstructions] = useState(false);
 
@@ -267,7 +173,24 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
   };
   const [prepTab, setPrepTab] = useState<"questions" | "coding" | "pretask" | "review">("questions");
 
-  const effectiveRole = customRole || role;
+  const effectiveRoles = customRole.trim() ? [customRole.trim()] : selectedRoles;
+  const effectiveRole = customRole.trim() || formatInterviewRoleLabel(selectedRoles);
+  const suggestedTopics = getSuggestedTopicsForRoles(effectiveRoles);
+
+  const togglePresetRole = (presetRole: string) => {
+    setCustomRole("");
+    setSelectedRoles((prev) => {
+      const next = prev.includes(presetRole)
+        ? prev.length === 1
+          ? prev
+          : prev.filter((r) => r !== presetRole)
+        : [...prev, presetRole];
+      if (!isCustomInstructions) {
+        setAgentInstructions(getInstructionsForRoles(next));
+      }
+      return next;
+    });
+  };
 
   const handleAddTopic = () => {
     if (customTopic.trim() && !topics.includes(customTopic.trim())) {
@@ -403,6 +326,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
     const config: InterviewConfig = {
       candidateName: candidateName.trim(),
       role: effectiveRole,
+      roles: customRole.trim() ? undefined : selectedRoles,
       difficulty,
       topics,
       duration,
@@ -433,8 +357,8 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
     if (step > 0) setStep(step - 1);
   };
 
-  const questionGroups = buildQuestionGroups(PREDEFINED_QUESTIONS[effectiveRole] || [], difficulty, effectiveRole);
-  const codingTaskGroups = buildCodingTaskGroups(effectiveRole, difficulty, CODING_TASK_PRESETS);
+  const questionGroups = buildQuestionGroupsForRoles(effectiveRoles, difficulty, PREDEFINED_QUESTIONS);
+  const codingTaskGroups = buildCodingTaskGroupsForRoles(effectiveRoles, difficulty, CODING_TASK_PRESETS);
   const availableQuestionsFlat = flattenGroups(questionGroups);
   const availableCodingTasksFlat = flattenGroups(codingTaskGroups);
   const visibleQuestionGroups = filterGroupsByQuery(questionGroups, questionsQuery, questionSearchableText);
@@ -496,29 +420,41 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
           {step === 0 && (
             <>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Role *</label>
-                <div className="flex flex-wrap gap-2">
-                  {ROLES.map((r) => (
-                    <Button
-                      key={r}
-                      variant={role === r && !customRole ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => {
-                        setRole(r);
-                        setCustomRole("");
-                        if (!isCustomInstructions) {
-                          setAgentInstructions(getInstructionsForRole(r));
-                        }
-                      }}
-                    >
-                      {r}
-                    </Button>
-                  ))}
+                <label className="text-sm font-medium">Role(s) *</label>
+                <p className="text-xs text-zinc-500">
+                  Select one or more preset roles for a combined interview (e.g. Android + Backend).
+                </p>
+                <div className="flex flex-wrap gap-2" data-testid="setup-role-picker">
+                  {PRESET_ROLES.map((r) => {
+                    const selected = !customRole && selectedRoles.includes(r);
+                    return (
+                      <Button
+                        key={r}
+                        variant={selected ? "default" : "outline"}
+                        size="sm"
+                        data-testid={`setup-role-${r.replace(/\s+/g, "-").toLowerCase()}`}
+                        onClick={() => togglePresetRole(r)}
+                      >
+                        {r}
+                      </Button>
+                    );
+                  })}
                 </div>
+                {!customRole && selectedRoles.length > 1 && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    Combined: {formatInterviewRoleLabel(selectedRoles)}
+                  </p>
+                )}
                 <input
                   type="text"
                   value={customRole}
-                  onChange={(e) => setCustomRole(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCustomRole(value);
+                    if (value.trim() && !isCustomInstructions) {
+                      setAgentInstructions(getInstructionsForRole(value.trim()));
+                    }
+                  }}
                   placeholder="Or type a custom role..."
                   className="w-full h-10 px-3 rounded-lg border border-zinc-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
                 />
@@ -546,9 +482,9 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Topics *</label>
-                {ROLE_CONFIG[role]?.topics && !customRole && (
+                {suggestedTopics.length > 0 && !customRole && (
                   <div className="flex flex-wrap gap-2 mb-2">
-                    {ROLE_CONFIG[role].topics.map((topic) => (
+                    {suggestedTopics.map((topic) => (
                       <Badge
                         key={topic}
                         variant={topics.includes(topic) ? "default" : "secondary"}
@@ -780,7 +716,7 @@ export function SetupForm({ onStart, title, subtitle }: SetupFormProps = {}) {
                       {isCustomInstructions && (
                         <button
                           onClick={() => {
-                            setAgentInstructions(getInstructionsForRole(effectiveRole));
+                            setAgentInstructions(getInstructionsForRoles(effectiveRoles));
                             setIsCustomInstructions(false);
                           }}
                           className="text-xs text-blue-600 hover:underline cursor-pointer"

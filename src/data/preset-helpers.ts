@@ -161,6 +161,53 @@ export function buildCodingTaskGroups(
   return groups;
 }
 
+function prefixGroupHeading(heading: string, role: string, multiRole: boolean): string {
+  if (!multiRole || heading === "General") return heading;
+  return `${role} · ${heading}`;
+}
+
+/** Merge question groups from multiple preset roles (each role keeps its own headings). */
+export function buildQuestionGroupsForRoles(
+  roles: string[],
+  level: Difficulty,
+  questionsByRole: Record<string, PredefinedQuestion[]>
+): PresetGroup<PredefinedQuestion>[] {
+  const multiRole = roles.length > 1;
+  return roles.flatMap((role) =>
+    buildQuestionGroups(questionsByRole[role] || [], level, role).map((group) => ({
+      heading: prefixGroupHeading(group.heading, role, multiRole),
+      items: group.items,
+    }))
+  );
+}
+
+/** Merge coding-task groups from multiple roles; General presets appear once at the end. */
+export function buildCodingTaskGroupsForRoles(
+  roles: string[],
+  level: Difficulty,
+  presets: Record<string, CodingTaskPreset[]>
+): PresetGroup<CodingTaskPreset>[] {
+  const multiRole = roles.length > 1;
+  const groups: PresetGroup<CodingTaskPreset>[] = [];
+
+  for (const role of roles) {
+    for (const group of buildCodingTaskGroups(role, level, presets)) {
+      if (group.heading === "General") continue;
+      groups.push({
+        heading: prefixGroupHeading(group.heading, role, multiRole),
+        items: group.items,
+      });
+    }
+  }
+
+  const general = buildCodingTaskGroups(roles[0], level, presets).find((g) => g.heading === "General");
+  if (general) {
+    groups.push(general);
+  }
+
+  return groups;
+}
+
 export function flattenGroups<T>(groups: PresetGroup<T>[]): T[] {
   return groups.flatMap((g) => g.items);
 }

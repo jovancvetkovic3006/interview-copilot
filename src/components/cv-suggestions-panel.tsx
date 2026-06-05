@@ -67,7 +67,8 @@ function buildCvSuggestionsCacheKey(config: InterviewConfig): string {
     .filter((f) => (f.type === "cv" || f.type === "bio") && f.text?.trim().length > 50)
     .map((f) => `${f.id}:${f.text.length}`)
     .join("|");
-  return `${config.candidateName}|${config.role}|${config.difficulty}|${files}`;
+  const rolesKey = config.roles?.length ? config.roles.join("+") : config.role;
+  return `${config.candidateName}|${rolesKey}|${config.difficulty}|${files}`;
 }
 
 /**

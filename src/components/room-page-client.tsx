@@ -14,8 +14,8 @@ import type {
 import { PREDEFINED_QUESTIONS, CODING_TASK_PRESETS } from "@/data/presets";
 import { QUIZ_TEMPLATES, DEFAULT_SECONDS_PER_QUESTION } from "@/data/quiz-templates";
 import {
-  buildCodingTaskGroups,
-  buildQuestionGroups,
+  buildCodingTaskGroupsForRoles,
+  buildQuestionGroupsForRoles,
   filterGroupsByQuery,
   flattenGroups,
   questionSearchableText,
@@ -29,6 +29,7 @@ import { SetupForm } from "@/components/setup-form";
 import { InterviewReviewPanel } from "@/components/interview-review";
 import { AgentMessage } from "@/components/agent-message";
 import { CvSuggestionsPanel } from "@/components/cv-suggestions-panel";
+import { InterviewAssistantColumns } from "@/components/interview-assistant-columns";
 import { LiveQuizPanel } from "@/components/live-quiz-panel";
 import { QuizResultsSummary } from "@/components/quiz-results-summary";
 import { AssignmentHistoryStrip } from "@/components/assignment-history-strip";
@@ -58,6 +59,7 @@ import {
   inviteRoleLabel,
 } from "@/lib/room-invite";
 import { deriveInterviewTimerDisplay } from "@/lib/interview-timer";
+import { formatInterviewRoleLabel, resolveInterviewRoles } from "@/lib/interview-roles";
 import { hasUsableTranscript } from "@/lib/interview-report-gate";
 import {
   resolveSpeechRecognitionLanguage,
@@ -140,9 +142,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const [showTasksPanel, setShowTasksPanel] = useState(true);
   const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | "quiz" | "cv" | null>(null);
   const sidebarSectionsInitRef = useRef(false);
-  const leftColumnRef = useRef<HTMLDivElement>(null);
-  const [speechStackFraction, setSpeechStackFraction] = useState(0.44);
-  const speechResizeDragRef = useRef(false);
+  const qaPanelRef = useRef<HTMLDivElement>(null);
   const [reportGenerating, setReportGenerating] = useState(false);
   const [endInterviewModalOpen, setEndInterviewModalOpen] = useState(false);
   const [endInterviewNotes, setEndInterviewNotes] = useState("");
@@ -330,6 +330,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         "Candidate";
       return {
         role: cfg?.role || "Software Developer",
+        ...(cfg?.roles?.length ? { roles: cfg.roles } : {}),
         difficulty: cfg?.difficulty || "mid",
         topics: cfg?.topics?.length ? cfg.topics : ["general"],
         candidateName,
@@ -447,23 +448,20 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     setExpandedSection(hasCv ? "cv" : null);
   }, [roomConfig]);
 
+  /** Q&A sidebar must stay height-bound (min-h-0) so overflow-y-auto works; clamp when content shrinks. */
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!speechResizeDragRef.current || !leftColumnRef.current) return;
-      const rect = leftColumnRef.current.getBoundingClientRect();
-      const y = (e.clientY - rect.top) / rect.height;
-      setSpeechStackFraction(Math.min(0.72, Math.max(0.28, y)));
+    if (!showTasksPanel) return;
+    const el = qaPanelRef.current;
+    if (!el) return;
+    const clampScroll = () => {
+      const max = Math.max(0, el.scrollHeight - el.clientHeight);
+      if (el.scrollTop > max) el.scrollTop = max;
     };
-    const onUp = () => {
-      speechResizeDragRef.current = false;
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
+    clampScroll();
+    const ro = new ResizeObserver(clampScroll);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [showTasksPanel, expandedSection]);
 
   useEffect(() => {
     roomConfigLiveRef.current = roomConfig;
@@ -909,10 +907,14 @@ If the quiz is still in progress, note what is provisional and what to watch for
   const showInterviewerCoding = Boolean(interviewerCodingTask?.title);
   const hasAssignmentHistory = codingTaskHistory.length > 0 || quizHistory.length > 0;
 
-  const configuredRole = roomConfig?.role || "Frontend Developer";
+  const configuredRoles = resolveInterviewRoles({
+    role: roomConfig?.role || "Frontend Developer",
+    roles: roomConfig?.roles,
+  });
+  const configuredRole = roomConfig?.role || formatInterviewRoleLabel(configuredRoles);
   const configuredDifficulty = roomConfig?.difficulty || "mid";
-  const questionGroups = buildQuestionGroups(PREDEFINED_QUESTIONS[configuredRole] || [], configuredDifficulty, configuredRole);
-  const codingTaskGroups = buildCodingTaskGroups(configuredRole, configuredDifficulty, CODING_TASK_PRESETS);
+  const questionGroups = buildQuestionGroupsForRoles(configuredRoles, configuredDifficulty, PREDEFINED_QUESTIONS);
+  const codingTaskGroups = buildCodingTaskGroupsForRoles(configuredRoles, configuredDifficulty, CODING_TASK_PRESETS);
   const availableQuestions: PredefinedQuestion[] = flattenGroups(questionGroups);
   const availableTasks: CodingTaskPreset[] = flattenGroups(codingTaskGroups);
   const visiblePanelQuestionGroups = filterGroupsByQuery(questionGroups, panelQuestionsQuery, questionSearchableText);
@@ -1868,24 +1870,14 @@ If the quiz is still in progress, note what is provisional and what to watch for
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
-        <div
-          ref={leftColumnRef}
-          className="w-95 min-w-80 flex flex-col border-r border-zinc-200 dark:border-zinc-800 min-h-0"
-        >
-          <div
-            className="flex flex-col min-h-0 overflow-hidden"
-            style={{ flex: `${speechStackFraction} 1 0%` }}
-          >
-            <div className="flex-1 flex flex-col min-h-0 bg-zinc-50/80 dark:bg-zinc-900/40 border-b border-zinc-200/80 dark:border-zinc-800">
-            <div className="px-3 py-2 flex items-center gap-1.5 border-b border-zinc-200/80 dark:border-zinc-800 shrink-0">
-              <Mic className={`h-3.5 w-3.5 shrink-0 ${isRecording ? "text-red-500 animate-pulse" : "text-zinc-400"}`} />
-              <span className="text-xs font-medium">Live transcript</span>
-              {isRecording && <span className="text-[10px] text-red-500">● REC</span>}
-              <span className="text-[10px] text-zinc-500 ml-auto" title="Web Speech API language">
-                {speechLanguageLabel}
-              </span>
-            </div>
-            <div className="flex-1 min-h-[72px] overflow-y-auto p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+        <InterviewAssistantColumns
+          speechLanguageLabel={speechLanguageLabel}
+          isRecording={isRecording}
+          transcriptLineCount={transcript.length}
+          insightsCount={transcriptAnalyses.length}
+          analysisBusy={analysisBusy}
+          transcriptBody={
+            <div className="p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
               {transcript.length === 0 && !interimText ? (
                 <p className="text-zinc-400 italic leading-relaxed">
                   Speech from the <strong>candidate</strong> and every <strong>interviewer</strong> appears here after each person taps <strong>Record</strong> on their device (own mic). Recognition language: <strong>{speechLanguageLabel}</strong> (set by host at setup).
@@ -1923,21 +1915,15 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 </div>
               )}
             </div>
-            </div>
-
-            <div className="flex-1 flex flex-col min-h-0 bg-violet-50/80 dark:bg-violet-950/30">
-            <div className="px-3 py-2 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 shrink-0 border-b border-violet-200/80 dark:border-violet-900/60">
-              <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
-              <span className="text-xs font-medium text-violet-900 dark:text-violet-100">Answer insights (speech)</span>
-              <span className="text-[10px] text-violet-700/80 dark:text-violet-300/80">Not shown to candidate</span>
-              {analysisBusy && (
-                <span className="text-[10px] text-violet-600 dark:text-violet-400 ml-auto animate-pulse">Analyzing…</span>
-              )}
-            </div>
-            <div className="flex-1 min-h-[72px] overflow-y-auto p-3 space-y-2">
+          }
+          insightsBody={
+            <div className="p-3 space-y-2">
+              <p className="text-[10px] text-violet-700/80 dark:text-violet-300/80 px-0.5">
+                Private to interviewers — not shown to candidate
+              </p>
               {transcriptAnalyses.length === 0 && !analysisBusy ? (
                 <p className="text-xs text-violet-800/75 dark:text-violet-200/75 italic leading-relaxed">
-                  When anyone records (candidate or interviewers), the host&apos;s client analyzes the latest transcript window — candidate answer quality, context from all panel speech, and follow-up ideas.
+                  When anyone records, the host&apos;s client analyzes the latest transcript window — answer quality, panel context, and follow-up ideas.
                 </p>
               ) : (
                 transcriptAnalyses.slice(-8).map((a) => (
@@ -1989,113 +1975,106 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 ))
               )}
             </div>
-            </div>
-          </div>
-
-          <div
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label="Resize transcript and chat panels"
-            className="h-1.5 shrink-0 cursor-row-resize bg-zinc-200 hover:bg-blue-400/70 dark:bg-zinc-800 dark:hover:bg-blue-600/60 transition-colors"
-            onMouseDown={() => {
-              speechResizeDragRef.current = true;
-            }}
-          />
-
-          <div className="flex flex-col min-h-0 overflow-hidden" style={{ flex: `${1 - speechStackFraction} 1 0%` }}>
-            {(pendingScoreQuestion || questionScores.length > 0) && (
-              <div
-                className="shrink-0 border-b border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 space-y-2 max-h-[40%] overflow-y-auto"
-                data-testid="question-scores-dock"
-              >
-                {pendingScoreQuestion && (
-                  <QuestionScorePrompt
-                    question={pendingScoreQuestion.question}
-                    category={pendingScoreQuestion.category}
-                    previousScore={pendingExistingScore?.score}
-                    onScore={(score) => handleQuestionScore(score)}
-                    onDismiss={() => setPendingScoreQuestion(null)}
-                  />
-                )}
-                {questionScores.length > 0 && (
-                  <QuestionScoresPanel
-                    scores={questionScores}
-                    onRescore={beginRescoreQuestion}
-                    compact
-                  />
-                )}
-              </div>
-            )}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-              {messages.length === 0 ? (
-                <div className="text-center text-sm text-zinc-400 mt-8">
-                  <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No messages yet.</p>
-                  <p className="mt-1 text-xs">Send a message to start the interview conversation</p>
+          }
+          chat={
+            <>
+              {(pendingScoreQuestion || questionScores.length > 0) && (
+                <div
+                  className="shrink-0 border-b border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 space-y-2 max-h-[40%] overflow-y-auto"
+                  data-testid="question-scores-dock"
+                >
+                  {pendingScoreQuestion && (
+                    <QuestionScorePrompt
+                      question={pendingScoreQuestion.question}
+                      category={pendingScoreQuestion.category}
+                      previousScore={pendingExistingScore?.score}
+                      onScore={(score) => handleQuestionScore(score)}
+                      onDismiss={() => setPendingScoreQuestion(null)}
+                    />
+                  )}
+                  {questionScores.length > 0 && (
+                    <QuestionScoresPanel
+                      scores={questionScores}
+                      onRescore={beginRescoreQuestion}
+                      compact
+                    />
+                  )}
                 </div>
-              ) : (
-                messages
-                  .filter((msg) => !msg.content.trimStart().startsWith("[Manual score"))
-                  .map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${msg.role === "agent" ? "items-start" : "items-end"}`}
-                  >
-                    <div className="text-xs text-zinc-500 mb-0.5 flex items-center gap-1">
-                      {msg.spoken && (
-                        <Mic
-                          className="h-3 w-3 text-blue-400"
-                          aria-label="Spoken (transcribed from microphone)"
-                        />
-                      )}
-                      <span>{msg.senderName}</span>
-                    </div>
-                    <div
-                      className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                        msg.role === "agent"
-                          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-                          : "bg-blue-600 text-white"
-                      }`}
-                    >
-                      {msg.role === "agent" ? <AgentMessage content={msg.content} /> : msg.content}
-                    </div>
+              )}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+                {messages.length === 0 ? (
+                  <div className="text-center text-sm text-zinc-400 mt-8">
+                    <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No messages yet.</p>
+                    <p className="mt-1 text-xs">Send a message to start the interview conversation</p>
                   </div>
-                ))
-              )}
-              {agentTyping && (
-                <div className="flex flex-col items-start">
-                  <div className="text-xs text-zinc-500 mb-0.5">AI Agent</div>
-                  <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-500">Thinking...</div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            <div className="border-t border-zinc-200 dark:border-zinc-800 p-3 shrink-0">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={handleChatKeyDown}
-                  data-testid="chat-input"
-                  placeholder="Type a message (sends to AI agent)..."
-                  className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <Button size="sm" data-testid="chat-send" onClick={handleSendMessage} disabled={!chatInput.trim()}>
-                  <Send className="h-4 w-4" />
-                </Button>
+                ) : (
+                  messages
+                    .filter((msg) => !msg.content.trimStart().startsWith("[Manual score"))
+                    .map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`flex flex-col ${msg.role === "agent" ? "items-start" : "items-end"}`}
+                      >
+                        <div className="text-xs text-zinc-500 mb-0.5 flex items-center gap-1">
+                          {msg.spoken && (
+                            <Mic
+                              className="h-3 w-3 text-blue-400"
+                              aria-label="Spoken (transcribed from microphone)"
+                            />
+                          )}
+                          <span>{msg.senderName}</span>
+                        </div>
+                        <div
+                          className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                            msg.role === "agent"
+                              ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                              : "bg-blue-600 text-white"
+                          }`}
+                        >
+                          {msg.role === "agent" ? <AgentMessage content={msg.content} /> : msg.content}
+                        </div>
+                      </div>
+                    ))
+                )}
+                {agentTyping && (
+                  <div className="flex flex-col items-start">
+                    <div className="text-xs text-zinc-500 mb-0.5">AI Agent</div>
+                    <div className="bg-zinc-100 dark:bg-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-500">Thinking...</div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
               </div>
-            </div>
-          </div>
-        </div>
+              <div className="border-t border-zinc-200 dark:border-zinc-800 p-3 shrink-0">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={handleChatKeyDown}
+                    data-testid="chat-input"
+                    placeholder="Type a message (sends to AI agent)..."
+                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <Button size="sm" data-testid="chat-send" onClick={handleSendMessage} disabled={!chatInput.trim()}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          }
+        />
 
         {showTasksPanel && (
-          <div className="w-75 min-w-65 flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-y-auto">
-            <div className="border-b border-zinc-200 dark:border-zinc-800">
+          <div
+            ref={qaPanelRef}
+            data-testid="qa-sidebar-panel"
+            className="w-75 min-w-65 shrink-0 flex flex-col min-h-0 self-stretch border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-y-auto overscroll-y-contain"
+          >
+            <div className="border-b border-zinc-200 dark:border-zinc-800 shrink-0">
               <button
                 onClick={() => setExpandedSection(expandedSection === "questions" ? null : "questions")}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 text-sm font-medium bg-white dark:bg-zinc-950 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors border-b border-transparent"
               >
                 {expandedSection === "questions" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <MessageSquare className="h-3.5 w-3.5 text-blue-500" />
@@ -2212,12 +2191,12 @@ If the quiz is still in progress, note what is provisional and what to watch for
               )}
             </div>
 
-            <div>
+            <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-800">
               <button
                 type="button"
                 data-testid="sidebar-tasks-toggle"
                 onClick={() => setExpandedSection(expandedSection === "tasks" ? null : "tasks")}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 text-sm font-medium bg-white dark:bg-zinc-950 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
               >
                 {expandedSection === "tasks" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <Code2 className="h-3.5 w-3.5 text-green-500" />
@@ -2395,12 +2374,12 @@ If the quiz is still in progress, note what is provisional and what to watch for
               )}
             </div>
 
-            <div>
+            <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-800">
               <button
                 type="button"
                 data-testid="sidebar-quizzes-toggle"
                 onClick={() => setExpandedSection(expandedSection === "quiz" ? null : "quiz")}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 text-sm font-medium bg-white dark:bg-zinc-950 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
               >
                 {expandedSection === "quiz" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 <ListChecks className="h-3.5 w-3.5 text-indigo-500" />
@@ -2472,12 +2451,12 @@ If the quiz is still in progress, note what is provisional and what to watch for
               )}
             </div>
 
-            <div className="border-t border-zinc-200 dark:border-zinc-800">
+            <div className="shrink-0 border-t border-zinc-200 dark:border-zinc-800">
               <button
                 type="button"
                 data-testid="sidebar-cv-toggle"
                 onClick={() => setExpandedSection(expandedSection === "cv" ? null : "cv")}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+                className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 text-sm font-medium bg-white dark:bg-zinc-950 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
                 title="AI-generated suggestions based on the candidate's CV (interviewer only)"
               >
                 {expandedSection === "cv" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}

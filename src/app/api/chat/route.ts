@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { formatManualQuestionScoresPromptSection } from "@/lib/chat-prompt-sections";
 import { appendCodingReviewToSystemPrompt } from "@/lib/chat-coding-prompt";
 import { appendLiveQuizToSystemPrompt } from "@/lib/chat-quiz-prompt";
+import { formatInterviewRoleLabel, isMultiRoleInterview, resolveInterviewRoles } from "@/lib/interview-roles";
 import type { LiveQuizAgentContext } from "@/lib/quiz-summary";
 
 // Model fallback chain — tries each model in order until one works
@@ -100,7 +101,17 @@ function buildSystemPrompt(config: {
     requestedBy?: "interviewer" | "candidate";
   };
 }) {
-  let prompt = `You are an interviewer assistant helping a human interviewer run a ${config.difficulty}-level ${config.role} interview.
+  const interviewRoles = resolveInterviewRoles(config);
+  const roleLabel = formatInterviewRoleLabel(interviewRoles);
+  const multiRole = isMultiRoleInterview(config);
+
+  let prompt = multiRole
+    ? `You are an interviewer assistant helping a human interviewer run a ${config.difficulty}-level interview covering multiple role areas: ${roleLabel}.
+
+Balance questions and coding tasks across these areas: ${interviewRoles.join(", ")}.`
+    : `You are an interviewer assistant helping a human interviewer run a ${config.difficulty}-level ${roleLabel} interview.`;
+
+  prompt += `
 
 The candidate's name is ${config.candidateName}.
 
@@ -377,8 +388,12 @@ async function generateReview(body: {
     ? transcript.map((t) => `[${new Date(t.timestamp).toLocaleTimeString()}] ${t.speaker}: ${t.text}`).join("\n")
     : "";
 
-  const reviewPrompt = `You are reviewing a technical interview for a ${config.difficulty}-level ${config.role} position.
-Candidate: ${config.candidateName}
+  const reviewRoles = resolveInterviewRoles(config);
+  const reviewRoleLabel = formatInterviewRoleLabel(reviewRoles);
+  const reviewMultiRole = reviewRoles.length > 1;
+
+  const reviewPrompt = `You are reviewing a technical interview for a ${config.difficulty}-level ${reviewMultiRole ? `combined position (${reviewRoleLabel})` : `${reviewRoleLabel} position`}.
+${reviewMultiRole ? `Assess the candidate across: ${reviewRoles.join(", ")}.\n` : ""}Candidate: ${config.candidateName}
 
 FULL CONVERSATION:
 ${conversationSummary}

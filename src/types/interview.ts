@@ -102,7 +102,10 @@ import type { SpeechLanguageMode } from "@/lib/speech-recognition-language";
 
 export interface InterviewConfig {
   candidateName: string;
+  /** Display label, e.g. "Android Developer + Backend Developer". */
   role: string;
+  /** Preset roles selected at setup (multi-role interviews). Omitted for legacy single-role rooms. */
+  roles?: string[];
   difficulty: Difficulty;
   topics: string[];
   duration: number; // in minutes
