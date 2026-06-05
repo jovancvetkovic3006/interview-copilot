@@ -1018,6 +1018,8 @@ If the quiz is still in progress, note what is provisional and what to watch for
     [visiblePanelTaskGroups, selectedTaskIds]
   );
 
+  const closeQaPanel = useCallback(() => setShowTasksPanel(false), []);
+
   const handleAssignTask = useCallback((task: CodingTaskPreset) => {
     sendCodingTask({
       title: task.title,
@@ -1028,7 +1030,8 @@ If the quiz is still in progress, note what is provisional and what to watch for
       // editor so it shows the PRE-TASK badge instead of treating it as a fresh assignment.
       ...(task.preTask ? { source: "external-pre-task" as const } : {}),
     });
-  }, [sendCodingTask]);
+    closeQaPanel();
+  }, [sendCodingTask, closeQaPanel]);
 
   const handleAssignQuiz = useCallback(
     (templateId: string) => {
@@ -1043,8 +1046,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
         assignedAt: Date.now(),
       };
       sendQuizStart(quiz);
+      closeQaPanel();
     },
-    [sendQuizStart]
+    [sendQuizStart, closeQaPanel]
   );
 
   const notifyAgentOfQuestionScore = useCallback(
@@ -1175,6 +1179,14 @@ If the quiz is still in progress, note what is provisional and what to watch for
       await handleSendQuestionWithScore(question, meta);
     },
     [handleSendQuestionWithScore]
+  );
+
+  const qaSendQuestion = useCallback(
+    async (question: string, meta?: { questionId?: string; category?: string }) => {
+      await handleSendQuestionWithScore(question, meta);
+      closeQaPanel();
+    },
+    [handleSendQuestionWithScore, closeQaPanel]
   );
 
   const runReportGeneration = useCallback(async (notesOverride?: string) => {
@@ -1787,16 +1799,6 @@ If the quiz is still in progress, note what is provisional and what to watch for
             <Users className="h-3.5 w-3.5" />
             <span className="text-xs font-medium">{participants.length}</span>
           </div>
-          <Button
-            variant={showTasksPanel ? "default" : "outline"}
-            size="sm"
-            data-testid="qa-drawer-toggle"
-            onClick={() => setShowTasksPanel(!showTasksPanel)}
-            title="Toggle questions & tasks panel"
-          >
-            <ListChecks className="h-3.5 w-3.5" />
-            Q&A
-          </Button>
           {phase === "interview" && (codingTask as { title?: string } | null)?.title && (
             <Button
               type="button"
@@ -1872,7 +1874,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden min-h-0 relative">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         <InterviewAssistantColumns
           speechLanguageLabel={speechLanguageLabel}
           isRecording={isRecording}
@@ -2068,12 +2070,13 @@ If the quiz is still in progress, note what is provisional and what to watch for
           }
         />
 
-        <QaFloatingDrawer
-          open={showTasksPanel}
-          onOpenChange={setShowTasksPanel}
-          panelRef={qaPanelRef}
-        >
-          <div className="flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0 relative">
+          <QaFloatingDrawer
+            open={showTasksPanel}
+            onOpenChange={setShowTasksPanel}
+            panelRef={qaPanelRef}
+          >
+            <div className="flex flex-col">
             <div className="border-b border-zinc-200 dark:border-zinc-800 shrink-0">
               <button
                 onClick={() => setExpandedSection(expandedSection === "questions" ? null : "questions")}
@@ -2151,7 +2154,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                                       size="sm"
                                       className="shrink-0 h-7 w-7 p-0 text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60"
                                       data-testid="send-question-btn"
-                                      onClick={() => handleSendQuestion(q.question, { questionId: q.id, category: q.category })}
+                                      onClick={() => qaSendQuestion(q.question, { questionId: q.id, category: q.category })}
                                       title="Send this question to chat (the agent will react)"
                                     >
                                       <Send className="h-3 w-3" />
@@ -2176,7 +2179,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
                                       size="sm"
                                       className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-7 w-7 p-0"
                                       data-testid="send-question-btn"
-                                      onClick={() => handleSendQuestion(q.question, { questionId: q.id, category: q.category })}
+                                      onClick={() => qaSendQuestion(q.question, { questionId: q.id, category: q.category })}
                                       title="Send this question to chat"
                                     >
                                       <Send className="h-3 w-3" />
@@ -2490,10 +2493,9 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 />
               </div>
             </div>
-          </div>
-        </QaFloatingDrawer>
+            </div>
+          </QaFloatingDrawer>
 
-        <div className="flex-1 flex flex-col min-h-0">
           {hasAssignmentHistory && assignmentHistoryStrip}
           {showInterviewerQuiz ? (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
