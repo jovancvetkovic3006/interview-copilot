@@ -178,7 +178,17 @@ export async function addTimeExtension(
   await expect(candidate.getByTestId("candidate-time-up-waiting")).toHaveCount(0, { timeout: 15_000 });
 }
 
+/** Open the floating Q&A drawer (interviewer room). No-op if already open. */
+export async function openQaDrawer(page: Page): Promise<void> {
+  if (await page.getByTestId("sidebar-tasks-toggle").isVisible().catch(() => false)) {
+    return;
+  }
+  await page.getByTestId("qa-drawer-toggle").click();
+  await expect(page.getByTestId("qa-sidebar-panel")).toBeVisible({ timeout: 10_000 });
+}
+
 export async function assignExternalPreTaskInRoom(host: Page, title: string): Promise<void> {
+  await openQaDrawer(host);
   const toggle = host.getByTestId("sidebar-tasks-toggle");
   const row = host.locator("div").filter({ hasText: title }).first();
   await toggle.click();
@@ -189,6 +199,7 @@ export async function assignExternalPreTaskInRoom(host: Page, title: string): Pr
 }
 
 export async function assignQuiz(page: Page, templateId: string): Promise<void> {
+  await openQaDrawer(page);
   const toggle = page.getByTestId("sidebar-quizzes-toggle");
   const assignBtn = page.getByTestId(`assign-quiz-${templateId}`);
   await toggle.click();
@@ -202,6 +213,7 @@ export async function assignQuiz(page: Page, templateId: string): Promise<void> 
 }
 
 export async function assignCodingTask(page: Page, taskId: string): Promise<void> {
+  await openQaDrawer(page);
   const toggle = page.getByTestId("sidebar-tasks-toggle");
   const btn = page.getByTestId(`assign-coding-${taskId}`).first();
   await toggle.click();
@@ -237,6 +249,7 @@ export async function completeLiveQuiz(page: Page, maxQuestions = 12): Promise<v
 
 /** Host sends first sidebar question and rates the answer (triggers agent notify). */
 export async function sendQuestionAndScore(page: Page, score = 8): Promise<void> {
+  await openQaDrawer(page);
   const sendBtn = page.getByTestId("send-question-btn").first();
   await sendBtn.scrollIntoViewIfNeeded();
   await sendBtn.click({ force: true });

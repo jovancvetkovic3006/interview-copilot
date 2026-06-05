@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import {
   assignQuiz,
   completeLiveQuiz,
+  openQaDrawer,
   randomRoomCode,
   startLiveInterview,
 } from "./helpers/room";
@@ -20,6 +21,7 @@ test.describe("Live quiz flow (E2E)", () => {
     await expect(candidate.getByTestId("live-quiz-panel")).toBeVisible({ timeout: 30_000 });
     await completeLiveQuiz(candidate);
 
+    await openQaDrawer(host);
     await host.getByTestId("sidebar-quizzes-toggle").click();
     await expect(host.getByTestId("quiz-results-complete").first()).toBeVisible({
       timeout: 30_000,

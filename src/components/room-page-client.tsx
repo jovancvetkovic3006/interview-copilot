@@ -30,6 +30,7 @@ import { InterviewReviewPanel } from "@/components/interview-review";
 import { AgentMessage } from "@/components/agent-message";
 import { CvSuggestionsPanel } from "@/components/cv-suggestions-panel";
 import { InterviewAssistantColumns } from "@/components/interview-assistant-columns";
+import { QaFloatingDrawer } from "@/components/qa-floating-drawer";
 import { LiveQuizPanel } from "@/components/live-quiz-panel";
 import { QuizResultsSummary } from "@/components/quiz-results-summary";
 import { AssignmentHistoryStrip } from "@/components/assignment-history-strip";
@@ -139,7 +140,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
-  const [showTasksPanel, setShowTasksPanel] = useState(true);
+  const [showTasksPanel, setShowTasksPanel] = useState(false);
   const [expandedSection, setExpandedSection] = useState<"questions" | "tasks" | "quiz" | "cv" | null>(null);
   const sidebarSectionsInitRef = useRef(false);
   const qaPanelRef = useRef<HTMLDivElement>(null);
@@ -446,6 +447,7 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
       (f) => (f.type === "cv" || f.type === "bio") && f.text.trim().length > 50
     );
     setExpandedSection(hasCv ? "cv" : null);
+    if (hasCv) setShowTasksPanel(true);
   }, [roomConfig]);
 
   /** Q&A sidebar must stay height-bound (min-h-0) so overflow-y-auto works; clamp when content shrinks. */
@@ -1788,6 +1790,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
           <Button
             variant={showTasksPanel ? "default" : "outline"}
             size="sm"
+            data-testid="qa-drawer-toggle"
             onClick={() => setShowTasksPanel(!showTasksPanel)}
             title="Toggle questions & tasks panel"
           >
@@ -1869,7 +1872,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
         <InterviewAssistantColumns
           speechLanguageLabel={speechLanguageLabel}
           isRecording={isRecording}
@@ -2065,12 +2068,12 @@ If the quiz is still in progress, note what is provisional and what to watch for
           }
         />
 
-        {showTasksPanel && (
-          <div
-            ref={qaPanelRef}
-            data-testid="qa-sidebar-panel"
-            className="w-75 min-w-65 shrink-0 flex flex-col min-h-0 self-stretch border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-y-auto overscroll-y-contain"
-          >
+        <QaFloatingDrawer
+          open={showTasksPanel}
+          onOpenChange={setShowTasksPanel}
+          panelRef={qaPanelRef}
+        >
+          <div className="flex flex-col">
             <div className="border-b border-zinc-200 dark:border-zinc-800 shrink-0">
               <button
                 onClick={() => setExpandedSection(expandedSection === "questions" ? null : "questions")}
@@ -2488,7 +2491,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
               </div>
             </div>
           </div>
-        )}
+        </QaFloatingDrawer>
 
         <div className="flex-1 flex flex-col min-h-0">
           {hasAssignmentHistory && assignmentHistoryStrip}

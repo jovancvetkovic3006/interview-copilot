@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import {
   completeHostSetupWithCv,
   joinRoom,
+  openQaDrawer,
   randomRoomCode,
   waitForPartyConnected,
 } from "./helpers/room";
@@ -19,6 +20,7 @@ test.describe("CV insights panel (E2E)", () => {
     await completeHostSetupWithCv(host);
     await waitForPartyConnected(host);
 
+    await openQaDrawer(host);
     await host.getByTestId("sidebar-cv-toggle").click();
     await expect(host.getByTestId("cv-suggestions-panel")).toBeVisible({ timeout: 15_000 });
     await expect(host.getByTestId("cv-suggestions-loaded")).toBeVisible({ timeout: 30_000 });

@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import {
   completeHostSetupWithPinnedQuestion,
   joinRoom,
+  openQaDrawer,
   randomRoomCode,
   waitForPartyConnected,
 } from "./helpers/room";
@@ -20,6 +21,7 @@ test.describe("Setup pinned questions (E2E)", () => {
     await completeHostSetupWithPinnedQuestion(host, PINNED_QUESTION_ID);
     await waitForPartyConnected(host);
 
+    await openQaDrawer(host);
     await expect(host.getByText("Pinned at setup").first()).toBeVisible({ timeout: 15_000 });
     await expect(host.getByTestId("send-question-btn").first()).toBeVisible();
 
