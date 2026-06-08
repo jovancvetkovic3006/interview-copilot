@@ -11,6 +11,8 @@ import {
   formatQuestionScoresForReport,
   shouldSummarizeTranscriptBeforeReport,
 } from "@/lib/interview-report-spoken";
+import { saveInterviewReportToBlob } from "@/lib/interview-report-blob";
+import { buildInterviewReportMeta, normalizeRoomCode } from "@/lib/interview-report-meta";
 
 /**
  * If the spoken transcript has more than this many lines, we ask the dedicated transcript-summary
@@ -286,7 +288,20 @@ Output **only** Markdown (no JSON wrapper, no code fences around the whole docum
       return NextResponse.json({ error: "Empty model response" }, { status: 500 });
     }
 
-    return NextResponse.json({ markdown });
+    const generatedAt = Date.now();
+    const code = normalizeRoomCode(String(roomCode ?? ""));
+    let stored = false;
+    if (code) {
+      const meta = buildInterviewReportMeta({
+        roomCode: code,
+        config: config ?? null,
+        participants,
+        generatedAt,
+      });
+      stored = await saveInterviewReportToBlob(code, { markdown, generatedAt }, meta);
+    }
+
+    return NextResponse.json({ markdown, generatedAt, stored });
   } catch (error: unknown) {
     console.error("interview-report error:", error);
     let message = "Failed to generate interview report";

@@ -7,6 +7,7 @@ import { FileDown, Copy, Check, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { InterviewReport, QuestionScoreEntry } from "@/types/room";
 import { downloadInterviewPdf } from "@/lib/interview-pdf";
+import { downloadInterviewMarkdown } from "@/lib/interview-report-storage";
 import { QuestionScoresPanel } from "@/components/question-scores-panel";
 
 type SessionNotesGateProps = {
@@ -66,6 +67,11 @@ export function InterviewReviewPanel({
     downloadInterviewPdf(report.markdown, roomCode);
   }, [report, roomCode]);
 
+  const handleMarkdownFile = useCallback(() => {
+    if (!report?.markdown) return;
+    downloadInterviewMarkdown(report.markdown, roomCode);
+  }, [report, roomCode]);
+
   const reportUnavailable = report ? isReportUnavailableMarkdown(report.markdown) : false;
 
   return (
@@ -84,13 +90,17 @@ export function InterviewReviewPanel({
                 )}
               </CardDescription>
             </div>
-            {report && (
+            {report && !reportUnavailable && (
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
                   {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                   {copied ? "Copied" : "Copy Markdown"}
                 </Button>
-                <Button type="button" size="sm" onClick={handlePdf}>
+                <Button type="button" variant="outline" size="sm" onClick={handleMarkdownFile}>
+                  <FileDown className="h-4 w-4" />
+                  Download .md
+                </Button>
+                <Button type="button" size="sm" data-testid="download-report-pdf" onClick={handlePdf}>
                   <FileDown className="h-4 w-4" />
                   Download PDF
                 </Button>
@@ -235,6 +245,14 @@ export function InterviewReviewPanel({
               >
                 {report.markdown}
               </article>
+              {role === "interviewer" && !reportUnavailable && (
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  Re-open{" "}
+                  <span className="font-mono text-blue-600">/interview/{roomCode}</span> as interviewer, or
+                  browse all archived reports at{" "}
+                  <span className="font-mono text-blue-600">/interview/reports</span>.
+                </p>
+              )}
             </div>
           )}
         </CardContent>

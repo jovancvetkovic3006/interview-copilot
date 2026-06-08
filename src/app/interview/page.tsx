@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, ArrowRight, ClipboardList, ListChecks } from "lucide-react";
+import { Users, ArrowRight, ClipboardList, ListChecks, FileText } from "lucide-react";
 
 function generateRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -45,6 +45,21 @@ export default function InterviewLobbyPage() {
             <p className="text-xs text-zinc-500 text-center mt-1.5">
               Share the candidate invite link from the room after you join
             </p>
+          </div>
+
+          <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+            <Link
+              href="/interview/reports"
+              className="flex items-start gap-2 rounded-lg p-2 -mx-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+            >
+              <FileText className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Browse interview reports</p>
+                <p className="text-xs text-zinc-500">
+                  Archived summaries from past interviews (download .md or PDF).
+                </p>
+              </div>
+            </Link>
           </div>
 
           <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">

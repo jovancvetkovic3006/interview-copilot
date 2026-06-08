@@ -183,6 +183,7 @@ export default class InterviewRoom implements Party.Server {
   private connToParticipant = new Map<string, string>();
   /** How many live connections per participant id (multi-tab / reconnect). */
   private participantConnectionCount = new Map<string, number>();
+  private storageHydrated = false;
 
   state: RoomState = {
     participants: [],
@@ -206,13 +207,26 @@ export default class InterviewRoom implements Party.Server {
     timeExtensionMinutes: 0,
   };
 
+  private async ensureStorageHydrated() {
+    if (this.storageHydrated) return;
+    const [storedReport, storedPhase] = await Promise.all([
+      this.room.storage.get<InterviewReport>("interviewReport"),
+      this.room.storage.get<RoomState["phase"]>("phase"),
+    ]);
+    if (storedReport) this.state.interviewReport = storedReport;
+    if (storedPhase) this.state.phase = storedPhase;
+    this.storageHydrated = true;
+  }
+
   onConnect(conn: Party.Connection) {
-    conn.send(
-      JSON.stringify({
-        type: "sync-response",
-        state: this.state,
-      })
-    );
+    void this.ensureStorageHydrated().then(() => {
+      conn.send(
+        JSON.stringify({
+          type: "sync-response",
+          state: this.state,
+        })
+      );
+    });
   }
 
   private persistActiveQuizToHistory() {
@@ -430,6 +444,9 @@ export default class InterviewRoom implements Party.Server {
           this.state.interviewStartedAt = Date.now();
         }
         this.state.phase = next;
+        if (next === "review") {
+          void this.room.storage.put("phase", next);
+        }
         const phasePayload = {
           type: "phase" as const,
           phase: this.state.phase,
@@ -608,6 +625,9 @@ export default class InterviewRoom implements Party.Server {
 
       case "interview-report": {
         this.state.interviewReport = data.report;
+        void this.room.storage.put("interviewReport", data.report);
+        void this.room.storage.put("phase", "review");
+        this.state.phase = "review";
         this.room.broadcast(JSON.stringify(data));
         break;
       }
@@ -632,12 +652,14 @@ export default class InterviewRoom implements Party.Server {
 
   async onRequest(req: Party.Request) {
     if (req.method === "GET") {
+      await this.ensureStorageHydrated();
       return new Response(
         JSON.stringify({
           roomId: this.room.id,
           participants: this.state.participants,
           phase: this.state.phase,
           hostParticipantId: this.state.hostParticipantId,
+          hasInterviewReport: Boolean(this.state.interviewReport),
         }),
         {
           status: 200,

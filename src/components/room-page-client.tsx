@@ -3,7 +3,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { usePartyRoom } from "@/hooks/use-party-room";
 import { useSpeechTranscription } from "@/hooks/use-speech-transcription";
-import type { Participant, QuestionScoreEntry } from "@/types/room";
+import type { InterviewReport, Participant, QuestionScoreEntry } from "@/types/room";
 import type { ActiveQuiz, QuizAnswerEntry, QuizSubmission } from "@/types/quiz";
 import type {
   CodingTaskAssignmentSnapshot,
@@ -62,6 +62,7 @@ import {
 import { deriveInterviewTimerDisplay } from "@/lib/interview-timer";
 import { formatInterviewRoleLabel, resolveInterviewRoles } from "@/lib/interview-roles";
 import { hasUsableTranscript } from "@/lib/interview-report-gate";
+import { loadInterviewReport, saveInterviewReport } from "@/lib/interview-report-storage";
 import {
   resolveSpeechRecognitionLanguage,
   speechLanguageDisplayLabel,
@@ -502,6 +503,49 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   });
 
   const activeStep = resolveActiveStep(phase, step, live);
+
+  const localInterviewReport = useMemo(
+    () => (isInterviewer ? loadInterviewReport(roomCode) : null),
+    [roomCode, isInterviewer]
+  );
+  const [blobInterviewReport, setBlobInterviewReport] = useState<InterviewReport | null>(null);
+
+  useEffect(() => {
+    if (!isInterviewer || phase !== "review" || interviewReport) {
+      setBlobInterviewReport(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/interview-reports/${roomCode}`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { markdown?: string; generatedAt?: number };
+        if (!data.markdown?.trim() || cancelled) return;
+        setBlobInterviewReport({
+          markdown: data.markdown.trim(),
+          generatedAt: data.generatedAt ?? Date.now(),
+        });
+      } catch {
+        /* blob archive optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isInterviewer, phase, interviewReport, roomCode]);
+
+  const reviewReport =
+    interviewReport ??
+    (phase === "review" ? (blobInterviewReport ?? localInterviewReport) : null);
+
+  useEffect(() => {
+    if (reviewReport && isInterviewer && !interviewReport) {
+      saveInterviewReport(roomCode, reviewReport);
+    } else if (interviewReport && isInterviewer) {
+      saveInterviewReport(roomCode, interviewReport);
+    }
+  }, [interviewReport, reviewReport, roomCode, isInterviewer]);
 
   useEffect(() => {
     if (live && step === "setup") {
@@ -1225,7 +1269,11 @@ If the quiz is still in progress, note what is provisional and what to watch for
           quizSubmission,
         }),
       });
-      const data = (await res.json()) as { error?: string; markdown?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        markdown?: string;
+        generatedAt?: number;
+      };
       if (!res.ok || typeof data.markdown !== "string" || !data.markdown.trim()) {
         sendInterviewReport({
           markdown: `## Summary unavailable\n\n${data?.error || "The model did not return a report."}\n`,
@@ -1233,7 +1281,10 @@ If the quiz is still in progress, note what is provisional and what to watch for
         });
         return;
       }
-      sendInterviewReport({ markdown: data.markdown.trim(), generatedAt: Date.now() });
+      sendInterviewReport({
+        markdown: data.markdown.trim(),
+        generatedAt: data.generatedAt ?? Date.now(),
+      });
     } catch (e) {
       console.error(e);
       sendInterviewReport({
@@ -1271,7 +1322,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
     if (isRecording) stopRecording();
     sendPhase("review");
     setStep("review");
-    if (interviewReport) return;
+    if (interviewReport || localInterviewReport || blobInterviewReport) return;
     await runReportGeneration(endInterviewNotes);
   }, [
     endInterviewNotes,
@@ -1280,6 +1331,8 @@ If the quiz is still in progress, note what is provisional and what to watch for
     stopRecording,
     sendPhase,
     interviewReport,
+    localInterviewReport,
+    blobInterviewReport,
     runReportGeneration,
   ]);
 
@@ -1420,7 +1473,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
     return (
       <InterviewReviewPanel
         roomCode={roomCode}
-        report={interviewReport}
+        report={reviewReport}
         generating={reportGenerating}
         role={participant?.role ?? "interviewer"}
         questionScores={questionScores}
