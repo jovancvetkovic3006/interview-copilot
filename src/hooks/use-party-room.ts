@@ -88,14 +88,21 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
   } | null>(null);
   /** First interviewer (server-elected); only the host renders the SetupForm. */
   const [hostParticipantId, setHostParticipantId] = useState<string | null>(null);
+  /** Who has tapped Record on their device (STT is per-browser, not room-wide). */
+  const [transcriptRecordingByParticipant, setTranscriptRecordingByParticipant] = useState<
+    Record<string, boolean>
+  >({});
+  const participantIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     participantRoleRef.current = participant?.role ?? null;
-  }, [participant?.role]);
+    participantIdRef.current = participant?.id ?? null;
+  }, [participant?.role, participant?.id]);
 
   useEffect(() => {
     phaseRef.current = "setup";
     interviewSeenRef.current = false;
+    setTranscriptRecordingByParticipant({});
   }, [roomId]);
 
   useEffect(() => {
@@ -175,9 +182,18 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
       const data = JSON.parse(event.data) as RoomMessage;
 
       switch (data.type) {
-        case "participants":
+        case "participants": {
           setParticipants(data.participants);
+          const activeIds = new Set(data.participants.map((p) => p.id));
+          setTranscriptRecordingByParticipant((prev) => {
+            const next: Record<string, boolean> = {};
+            for (const [id, recording] of Object.entries(prev)) {
+              if (activeIds.has(id) && recording) next[id] = true;
+            }
+            return next;
+          });
           break;
+        }
         case "host":
           setHostParticipantId(data.hostParticipantId);
           break;
@@ -262,6 +278,12 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
           if (participantRoleRef.current !== "interviewer") break;
           setQuestionScores((prev) => upsertQuestionScoreEntry(prev, data.entry));
           break;
+        case "transcript-recording":
+          setTranscriptRecordingByParticipant((prev) => ({
+            ...prev,
+            [data.participantId]: data.recording,
+          }));
+          break;
         case "transcript": {
           // Live transcript is interviewer-only; candidates still send lines via sendTranscript.
           if (participantRoleRef.current === "candidate") break;
@@ -279,6 +301,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
               text: data.text,
               speaker: data.speaker,
               ...(data.speakerRole ? { speakerRole: data.speakerRole } : {}),
+              ...(data.participantId ? { participantId: data.participantId } : {}),
               timestamp: data.timestamp,
             },
           ]);
@@ -535,6 +558,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
       speaker,
       timestamp: Date.now(),
       ...(speakerRole ? { speakerRole } : {}),
+      ...(participantIdRef.current ? { participantId: participantIdRef.current } : {}),
     };
     const preview = text.length > 120 ? `${text.slice(0, 120)}…` : text;
     transcriptionTrace("sendTranscript (local + optional wire)", {
@@ -570,6 +594,20 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     );
   }, []);
 
+  const sendTranscriptRecording = useCallback((recording: boolean) => {
+    const participantId = participantIdRef.current;
+    if (!participantId) return;
+    setTranscriptRecordingByParticipant((prev) => ({ ...prev, [participantId]: recording }));
+    if (!socketRef.current) return;
+    socketRef.current.send(
+      JSON.stringify({
+        type: "transcript-recording",
+        participantId,
+        recording,
+      } satisfies RoomMessage)
+    );
+  }, []);
+
   return {
     connected,
     participants,
@@ -593,6 +631,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     interviewEndsAt,
     lastTimeExtension,
     hostParticipantId,
+    transcriptRecordingByParticipant,
     sendChat,
     sendAgentResponse,
     sendConfig,
@@ -607,6 +646,7 @@ export function usePartyRoom(roomId: string | null, participant: Participant | n
     sendQuestionScore,
     sendTimeExtension,
     sendTranscript,
+    sendTranscriptRecording,
     sendTranscriptAnalysis,
     sendInterviewReport,
   };

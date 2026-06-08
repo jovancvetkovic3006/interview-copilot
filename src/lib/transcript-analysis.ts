@@ -1,8 +1,8 @@
 import type { TranscriptAnalysisEntry } from "@/types/room";
 
-export const TRANSCRIPT_ANALYSIS_DEBOUNCE_MS = 4000;
-export const TRANSCRIPT_ANALYSIS_GATE_CHARS = 40;
-export const TRANSCRIPT_ANALYSIS_GATE_LINES = 2;
+export const TRANSCRIPT_ANALYSIS_DEBOUNCE_MS = 12_000;
+export const TRANSCRIPT_ANALYSIS_GATE_CHARS = 100;
+export const TRANSCRIPT_ANALYSIS_GATE_LINES = 4;
 export const TRANSCRIPT_ANALYSIS_MIN_CHARS = 28;
 export const TRANSCRIPT_ANALYSIS_WINDOW_LINES = 40;
 
@@ -74,7 +74,7 @@ export function normalizeTranscriptAnalysisResponse(
             .filter((q): q is string => typeof q === "string")
             .map((q) => q.trim())
             .filter((q) => q.length > 0 && q.length <= 240)
-            .slice(0, 3)
+            .slice(0, 1)
         : [];
 
   return {

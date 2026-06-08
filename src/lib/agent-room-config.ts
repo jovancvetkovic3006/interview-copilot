@@ -13,12 +13,12 @@ export function buildTranscriptInsightsForAgent(
 } | Record<string, never> {
   if (analyses.length === 0) return {};
   return {
-    transcriptInsights: analyses.slice(-8).map((a) => ({
+    transcriptInsights: analyses.slice(-3).map((a) => ({
       summary: a.summary,
       answerQuality: a.answerQuality,
       score: a.score,
       ...(a.followUpQuestions?.length
-        ? { followUpQuestions: a.followUpQuestions.slice(0, 3) }
+        ? { followUpQuestions: a.followUpQuestions.slice(0, 1) }
         : {}),
     })),
   };

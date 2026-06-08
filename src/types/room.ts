@@ -29,6 +29,8 @@ export interface TranscriptEntry {
   text: string;
   speaker: string;
   speakerRole?: Participant["role"];
+  /** Who recorded this line (server-stamped from the socket sender). */
+  participantId?: string;
   timestamp: number;
 }
 
@@ -173,8 +175,10 @@ export type RoomMessage =
       text: string;
       speaker: string;
       speakerRole?: Participant["role"];
+      participantId?: string;
       timestamp: number;
     }
+  | { type: "transcript-recording"; participantId: string; recording: boolean }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
   | { type: "interview-report"; report: InterviewReport }
   | { type: "sync-request" }

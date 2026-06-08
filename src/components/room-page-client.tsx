@@ -67,7 +67,16 @@ import {
   resolveSpeechRecognitionLanguage,
   speechLanguageDisplayLabel,
 } from "@/lib/speech-recognition-language";
-import { resolveTranscriptSpeakerLabel } from "@/lib/transcript-speaker";
+import {
+  formatTranscriptSpeakerDisplay,
+  resolveTranscriptSpeakerLabel,
+} from "@/lib/transcript-speaker";
+import {
+  compactAgentSuggestionReply,
+  PROACTIVE_SUGGESTION_MIN_INTERVAL_MS,
+  PROACTIVE_SUGGESTION_PROMPT_HINT,
+  QUESTION_SCORE_SUGGESTION_PROMPT_HINT,
+} from "@/lib/agent-suggestion-format";
 import { resolveActiveStep, sessionIsLive, type RoomUiStep } from "@/lib/room-step";
 import {
   Users,
@@ -212,9 +221,11 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     interviewEndsAt,
     lastTimeExtension,
     hostParticipantId,
+    transcriptRecordingByParticipant,
     sendChat,
     sendAgentResponse,
     sendTranscript,
+    sendTranscriptRecording,
     sendTranscriptAnalysis,
     sendPhase,
     sendConfig,
@@ -425,6 +436,55 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     return map;
   }, [participants]);
 
+  const participantsNotRecording = useMemo(
+    () => participants.filter((p) => !transcriptRecordingByParticipant[p.id]),
+    [participants, transcriptRecordingByParticipant]
+  );
+
+  const transcriptLineCountByParticipant = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of participants) counts.set(p.id, 0);
+    for (const entry of transcript) {
+      if (entry.participantId) {
+        counts.set(entry.participantId, (counts.get(entry.participantId) ?? 0) + 1);
+        continue;
+      }
+      const match = participants.find(
+        (p) =>
+          p.name === entry.speaker &&
+          (entry.speakerRole ? p.role === entry.speakerRole : true)
+      );
+      if (match) counts.set(match.id, (counts.get(match.id) ?? 0) + 1);
+    }
+    return counts;
+  }, [transcript, participants]);
+
+  const candidateParticipant = useMemo(
+    () => participants.find((p) => p.role === "candidate"),
+    [participants]
+  );
+
+  const transcriptImbalanceWarning = useMemo(() => {
+    if (transcript.length < 5) return null;
+    const active = participants
+      .map((p) => ({ p, count: transcriptLineCountByParticipant.get(p.id) ?? 0 }))
+      .filter((x) => x.count > 0);
+    if (active.length <= 1) return "single-source" as const;
+    const total = transcript.length;
+    const max = Math.max(...active.map((x) => x.count));
+    if (max / total >= 0.85) return "dominant" as const;
+    return null;
+  }, [transcript.length, participants, transcriptLineCountByParticipant]);
+
+  const candidateRecordingNoLines = Boolean(
+    candidateParticipant &&
+      transcriptRecordingByParticipant[candidateParticipant.id] &&
+      (transcriptLineCountByParticipant.get(candidateParticipant.id) ?? 0) === 0 &&
+      transcript.length >= 3
+  );
+
+  const noCandidateInRoom = phase === "interview" && !candidateParticipant;
+
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const lastAnalyzedTranscriptLenRef = useRef(0);
   const transcriptLiveRef = useRef(transcript);
@@ -631,19 +691,24 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
   }, [transcript, messages, roomConfig, participants, activeStep, participant, isHost, sendTranscriptAnalysis]);
 
   const lastProactiveAnalysisIdRef = useRef<string | null>(null);
+  const lastProactiveChatAtRef = useRef(0);
   useEffect(() => {
     if (activeStep !== "interview") return;
-    if (!participant || participant.role !== "interviewer") return;
+    if (!participant || !isHost) return;
     const latest = transcriptAnalyses[transcriptAnalyses.length - 1];
     if (!latest?.id) return;
+    if (latest.answerQuality === "n/a") return;
     if (lastProactiveAnalysisIdRef.current === latest.id) return;
+    if (Date.now() - lastProactiveChatAtRef.current < PROACTIVE_SUGGESTION_MIN_INTERVAL_MS) return;
     lastProactiveAnalysisIdRef.current = latest.id;
+    lastProactiveChatAtRef.current = Date.now();
 
     const contextMsg = {
       id: `msg-${Date.now()}`,
       role: "user" as const,
-      content:
-        "Provide me the next best question(s) based on the newest transcript insight and explain what signal to look for in the answer.",
+      content: `Latest transcript insight (${latest.answerQuality}, score ${latest.score}/10): ${latest.summary}${
+        latest.followUpQuestions?.[0] ? `\nCandidate probe idea: ${latest.followUpQuestions[0]}` : ""
+      }`,
       senderName: participant.name,
       timestamp: Date.now(),
     };
@@ -660,14 +725,15 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
               content: m.content,
             })),
             config: resolveAgentApiConfig(roomConfigLiveRef.current),
-            promptHint:
-              "Be proactive. Suggest 2-4 concise next questions, plus brief scoring hints for interviewer.",
+            promptHint: PROACTIVE_SUGGESTION_PROMPT_HINT,
           }),
         });
         const text = await res.text();
         if (text) {
           const data = JSON.parse(text) as { content?: string };
-          if (data.content) sendAgentResponse(data.content);
+          if (data.content) {
+            sendAgentResponse(compactAgentSuggestionReply(data.content));
+          }
         }
       } catch (err) {
         console.error("Proactive assistant error:", err);
@@ -675,7 +741,14 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
         setAgentTyping(false);
       }
     })();
-  }, [activeStep, participant, transcriptAnalyses, resolveAgentApiConfig, sendAgentResponse]);
+  }, [
+    activeStep,
+    participant,
+    isHost,
+    transcriptAnalyses,
+    resolveAgentApiConfig,
+    sendAgentResponse,
+  ]);
 
   const handleTranscriptSegment = useCallback(
     (text: string) => {
@@ -710,6 +783,20 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     onTranscript: handleTranscriptSegment,
     language: speechLanguage,
   });
+
+  useEffect(() => {
+    if (!participant || phase !== "interview") return;
+    sendTranscriptRecording(isRecording);
+  }, [participant, phase, isRecording, sendTranscriptRecording]);
+
+  const autoRecordStartedRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "interview" || !participant || !speechSupported || isRecording) return;
+    if (autoRecordStartedRef.current) return;
+    autoRecordStartedRef.current = true;
+    const timer = window.setTimeout(() => startRecording(), 600);
+    return () => window.clearTimeout(timer);
+  }, [phase, participant, speechSupported, isRecording, startRecording]);
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1119,15 +1206,17 @@ If the quiz is still in progress, note what is provisional and what to watch for
               content: m.content,
             })),
             config: resolveAgentApiConfig(roomConfigLiveRef.current),
-            promptHint: isUpdate
-              ? `The interviewer updated their rating to ${entry.score}/10 (${scoreLevelShortLabel(entry.score)}) for: "${entry.question}". Briefly acknowledge the change and suggest 2–3 follow-ups calibrated to this score.`
-              : `The interviewer rated the candidate's answer ${entry.score}/10 (${scoreLevelShortLabel(entry.score)}) for: "${entry.question}". Acknowledge the score, note what it implies, and suggest 2–3 targeted follow-ups or the next best question.`,
+            promptHint: `${QUESTION_SCORE_SUGGESTION_PROMPT_HINT} Question: "${entry.question}". ${
+              isUpdate ? "Updated" : "New"
+            } score: ${entry.score}/10 (${scoreLevelShortLabel(entry.score)}).`,
           }),
         });
         const text = await res.text();
         if (text) {
           const data = JSON.parse(text) as { content?: string };
-          if (data.content) sendAgentResponse(data.content);
+          if (data.content) {
+            sendAgentResponse(compactAgentSuggestionReply(data.content));
+          }
         }
       } catch (err) {
         console.error("Question-score agent notify error:", err);
@@ -1362,15 +1451,38 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 />
               </div>
 
-              {/* Hide role label entirely from candidates so they aren't aware of the role concept. */}
-              {inviteRole !== "candidate" && (
-                <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-3 py-2.5">
-                  <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">You&apos;re joining as</p>
-                  <Badge variant="secondary" className="text-xs capitalize">
-                    {inviteRoleLabel(inviteRole)}
-                  </Badge>
-                </div>
-              )}
+              <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-3 py-2.5 space-y-1.5">
+                <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Transcript identity</p>
+                <Badge
+                  variant="secondary"
+                  className={`text-xs capitalize ${
+                    inviteRole === "candidate"
+                      ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                      : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-200"
+                  }`}
+                >
+                  {inviteRoleLabel(inviteRole)}
+                </Badge>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  {inviteRole === "candidate" ? (
+                    <>
+                      Tvoj govor u transkriptu ide pod ulogu <strong>candidate</strong>
+                      {name.trim() ? (
+                        <>
+                          {" "}
+                          kao <strong>{name.trim()}</strong>
+                        </>
+                      ) : null}
+                      . Dozvoli mikrofon kad intervju počne.
+                    </>
+                  ) : (
+                    <>
+                      Ovaj link je za <strong>intervjuer</strong> — kandidatu pošalji{" "}
+                      <strong>/invite/{roomCode}</strong>, ne ovaj URL.
+                    </>
+                  )}
+                </p>
+              </div>
 
               <Button type="submit" className="w-full" disabled={!name.trim()} data-testid="join-submit">
                 Join interview
@@ -1444,6 +1556,23 @@ If the quiz is still in progress, note what is provisional and what to watch for
                 )}
               </div>
             </div>
+            {isInterviewer && !participants.some((p) => p.role === "candidate") && (
+              <div
+                data-testid="waiting-no-candidate"
+                className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 px-3 py-2.5 text-xs text-amber-950 dark:text-amber-100 leading-relaxed"
+              >
+                Nema kandidata u sobi — pošalji mu{" "}
+                <button
+                  type="button"
+                  className="underline font-medium"
+                  onClick={() => copyRoomInvite("candidate")}
+                >
+                  Candidate link
+                </button>{" "}
+                (/invite/{roomCode}). Ako je ušao preko /interview/ linka, u transkriptu će biti{" "}
+                <strong>interviewer</strong>.
+              </div>
+            )}
             <div className="text-center py-6 border-t border-zinc-200 dark:border-zinc-800">
               <Clock className="h-8 w-8 mx-auto mb-2 text-zinc-400 animate-pulse" />
               <p className="text-sm text-zinc-500">{waitingMessage}</p>
@@ -1836,17 +1965,23 @@ If the quiz is still in progress, note what is provisional and what to watch for
 
         <div className="flex items-center gap-3">
           <div className="flex -space-x-1.5">
-            {participants.map((p) => (
-              <div
-                key={p.id}
-                title={`${p.name} (${p.role}${hostParticipantId === p.id ? " · host" : ""})`}
-                className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-zinc-950 ${
-                  p.role === "interviewer" ? "bg-purple-500" : "bg-blue-500"
-                }`}
-              >
-                {p.name[0]?.toUpperCase()}
-              </div>
-            ))}
+            {participants.map((p) => {
+              const recording = Boolean(transcriptRecordingByParticipant[p.id]);
+              return (
+                <div
+                  key={p.id}
+                  title={`${p.name} (${p.role}${hostParticipantId === p.id ? " · host" : ""}${recording ? " · recording" : " · not recording"})`}
+                  className={`relative h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-zinc-950 ${
+                    p.role === "interviewer" ? "bg-purple-500" : "bg-blue-500"
+                  }`}
+                >
+                  {p.name[0]?.toUpperCase()}
+                  {recording && (
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border border-white dark:border-zinc-950" />
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="flex items-center gap-1.5 text-zinc-500">
             <Users className="h-3.5 w-3.5" />
@@ -1927,6 +2062,71 @@ If the quiz is still in progress, note what is provisional and what to watch for
         </div>
       </div>
 
+      {phase === "interview" && speechSupported && participantsNotRecording.length > 0 && (
+        <div
+          data-testid="transcript-recording-banner"
+          className="px-4 py-2 text-xs border-b border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/30 text-amber-950 dark:text-amber-100 leading-relaxed"
+        >
+          {isInterviewer ? (
+            <>
+              Transkript je <strong>po uređaju</strong> — svako mora da klikne <strong>Record</strong> na
+              svom browseru (Chrome/Edge). Još ne snimaju:{" "}
+              <strong>{participantsNotRecording.map((p) => p.name).join(", ")}</strong>.
+              {participantsNotRecording.some((p) => p.role === "candidate") && (
+                <>
+                  {" "}
+                  Kandidatu pošalji <strong>Candidate link</strong> (ne interviewer link) iz Invite links.
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              Klikni <strong>Record</strong> da bi tvoj govor ušao u transkript intervjua (samo sa tvog
+              mikrofona, ne iz cele sobe).
+            </>
+          )}
+        </div>
+      )}
+      {phase === "interview" && isInterviewer && noCandidateInRoom && (
+        <div
+          data-testid="transcript-no-candidate-warning"
+          className="px-4 py-2 text-xs border-b border-amber-200 dark:border-amber-900/50 bg-amber-50/90 dark:bg-amber-950/25 text-amber-950 dark:text-amber-100 leading-relaxed"
+        >
+          U sobi nema učesnika sa ulogom <strong>candidate</strong> — pošalji{" "}
+          <strong>Candidate link</strong> (/invite/…), ne interviewer link.
+        </div>
+      )}
+      {phase === "interview" && isInterviewer && candidateRecordingNoLines && (
+        <div
+          data-testid="transcript-candidate-no-lines-warning"
+          className="px-4 py-2 text-xs border-b border-red-200 dark:border-red-900/50 bg-red-50/90 dark:bg-red-950/25 text-red-900 dark:text-red-100 leading-relaxed"
+        >
+          Kandidat ima uključen Record, ali <strong>0 linija</strong> stiže u transkript. Proveri: Chrome
+          ili Edge, dozvola za mikrofon, i da je otvorio <strong>/invite/</strong> link (ne /interview/).
+        </div>
+      )}
+      {phase === "interview" && isInterviewer && transcriptImbalanceWarning && !candidateRecordingNoLines && (
+        <div
+          data-testid="transcript-single-speaker-warning"
+          className="px-4 py-2 text-xs border-b border-red-200 dark:border-red-900/50 bg-red-50/90 dark:bg-red-950/25 text-red-900 dark:text-red-100 leading-relaxed"
+        >
+          {transcriptImbalanceWarning === "single-source" ? (
+            <>
+              Skoro sve linije dolaze sa <strong>jednog uređaja</strong>. Ako je kandidat uključio mikrofon,
+              proveri da li mu stižu linije u statistici ispod transkripta. Ako koristite Zoom/Meet uz
+              platformu, <strong>slušalice</strong> sprečavaju da tvoj mikrofon hvata kandidatov glas iz
+              zvučnika.
+            </>
+          ) : (
+            <>
+              Jedan učesnik dominira transkriptom — često zato što mikrofon hvata i tuđi glas iz zvučnika
+              (Zoom bez slušalica). Svako neka koristi slušalice ili isključi Record na uređaju koji sluša
+              zvučnik.
+            </>
+          )}
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden min-h-0">
         <InterviewAssistantColumns
           speechLanguageLabel={speechLanguageLabel}
@@ -1936,15 +2136,43 @@ If the quiz is still in progress, note what is provisional and what to watch for
           analysisBusy={analysisBusy}
           transcriptBody={
             <div className="p-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+              {isInterviewer && phase === "interview" && participants.length > 0 && (
+                <div
+                  data-testid="transcript-line-stats"
+                  className="mb-2 pb-2 border-b border-zinc-200/80 dark:border-zinc-700/80 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500"
+                >
+                  {participants.map((p) => {
+                    const count = transcriptLineCountByParticipant.get(p.id) ?? 0;
+                    const recording = Boolean(transcriptRecordingByParticipant[p.id]);
+                    return (
+                      <span key={p.id}>
+                        <span className={p.role === "candidate" ? "text-blue-600 dark:text-blue-400" : "text-purple-700 dark:text-purple-300"}>
+                          {p.name}
+                        </span>{" "}
+                        ({p.role}
+                        {recording ? ", ● REC" : ""}): <strong>{count}</strong>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
               {transcript.length === 0 && !interimText ? (
                 <p className="text-zinc-400 italic leading-relaxed">
-                  Speech from the <strong>candidate</strong> and every <strong>interviewer</strong> appears here after each person taps <strong>Record</strong> on their device (own mic). Recognition language: <strong>{speechLanguageLabel}</strong> (set by host at setup).
+                  Svaka osoba u sobi mora da klikne <strong>Record</strong> na <strong>svom</strong> uređaju —
+                  transkript ne snima celu sobu, već samo mikrofon tog browsera. Crvena tačka na avataru =
+                  snima. Jezik: <strong>{speechLanguageLabel}</strong>.
                 </p>
               ) : (
                 transcript.slice(-30).map((entry, i) => {
-                  const lineRole = entry.speakerRole ?? speakerRoleByName.get(entry.speaker);
-                  const isCandidateLine =
-                    lineRole === "candidate" || entry.speaker === "Candidate";
+                  const rosterMatch = entry.participantId
+                    ? participants.find((p) => p.id === entry.participantId)
+                    : undefined;
+                  const lineRole =
+                    entry.speakerRole ??
+                    rosterMatch?.role ??
+                    speakerRoleByName.get(entry.speaker);
+                  const displayName = formatTranscriptSpeakerDisplay(entry, participants);
+                  const isCandidateLine = lineRole === "candidate";
                   const isInterviewerLine = lineRole === "interviewer";
                   return (
                     <div
@@ -1957,9 +2185,14 @@ If the quiz is still in progress, note what is provisional and what to watch for
                             : undefined
                       }
                     >
-                      <span className="font-medium">{entry.speaker}</span>
+                      <span className="font-medium">{displayName}</span>
                       {lineRole && (
-                        <span className="text-[10px] text-zinc-500 ml-1">({lineRole})</span>
+                        <Badge
+                          variant="outline"
+                          className="ml-1.5 text-[9px] px-1 py-0 h-4 align-middle capitalize"
+                        >
+                          {lineRole}
+                        </Badge>
                       )}
                       <span className="text-zinc-500">: </span>
                       {entry.text}
@@ -1981,56 +2214,62 @@ If the quiz is still in progress, note what is provisional and what to watch for
               </p>
               {transcriptAnalyses.length === 0 && !analysisBusy ? (
                 <p className="text-xs text-violet-800/75 dark:text-violet-200/75 italic leading-relaxed">
-                  When anyone records, the host&apos;s client analyzes the latest transcript window — answer quality, panel context, and follow-up ideas.
+                  When anyone records, the host analyzes speech every ~12s — one scoring hint and one next
+                  question per insight.
                 </p>
               ) : (
-                transcriptAnalyses.slice(-8).map((a) => (
-                  <div
-                    key={a.id}
-                    className="rounded-lg border border-violet-200/90 dark:border-violet-800/80 bg-white/90 dark:bg-zinc-900/90 p-2.5 text-xs"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] capitalize bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200"
-                      >
-                        {a.answerQuality.replace("-", " ")}
-                      </Badge>
-                      {a.score > 0 && (
-                        <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300">Score {a.score}/10</span>
-                      )}
-                      <span className="text-[10px] text-zinc-400 ml-auto">{new Date(a.timestamp).toLocaleTimeString()}</span>
-                    </div>
-                    <p className="text-zinc-700 dark:text-zinc-300 leading-relaxed">{a.summary}</p>
-                    {a.followUpQuestions && a.followUpQuestions.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-violet-100 dark:border-violet-900/60">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-1">
-                          Suggested follow-ups
-                        </div>
-                        <ul className="space-y-1">
-                          {a.followUpQuestions.map((q, i) => {
-                            const key = `${a.id}::${i}`;
-                            return (
-                              <li key={key}>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleSendQuestion(q, { category: "follow-up" })}
-                                  className="group w-full text-left flex items-start gap-1.5 rounded px-1.5 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors"
-                                  title="Ask this follow-up via assistant"
-                                >
-                                  <span className="flex-1 text-zinc-700 dark:text-zinc-200 leading-snug">
-                                    {q}
-                                  </span>
-                                  <Send className="h-3 w-3 mt-0.5 shrink-0 text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
+                transcriptAnalyses
+                  .filter((a) => a.answerQuality !== "n/a")
+                  .slice(-4)
+                  .map((a) => (
+                    <div
+                      key={a.id}
+                      className="rounded-lg border border-violet-200/90 dark:border-violet-800/80 bg-white/90 dark:bg-zinc-900/90 p-2.5 text-xs space-y-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] capitalize bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200"
+                        >
+                          {a.answerQuality.replace("-", " ")}
+                        </Badge>
+                        {a.score > 0 && (
+                          <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300">
+                            {a.score}/10
+                          </span>
+                        )}
+                        <span className="text-[10px] text-zinc-400 ml-auto">
+                          {new Date(a.timestamp).toLocaleTimeString()}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                ))
+                      <div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-0.5">
+                          Scoring hint
+                        </div>
+                        <p className="text-zinc-700 dark:text-zinc-300 leading-snug">{a.summary}</p>
+                      </div>
+                      {a.followUpQuestions?.[0] && (
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300 mb-0.5">
+                            Next best question
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleSendQuestion(a.followUpQuestions![0], { category: "follow-up" })
+                            }
+                            className="group w-full text-left flex items-start gap-1.5 rounded px-1.5 py-1 -mx-1.5 hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors"
+                            title="Send this question to chat"
+                          >
+                            <span className="flex-1 text-zinc-800 dark:text-zinc-100 leading-snug font-medium">
+                              {a.followUpQuestions[0]}
+                            </span>
+                            <Send className="h-3 w-3 mt-0.5 shrink-0 text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
               )}
             </div>
           }

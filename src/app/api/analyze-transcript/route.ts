@@ -86,22 +86,19 @@ Your job:
 - If there is no substantive candidate answer, set answerQuality to "n/a" and score 0 with a brief summary explaining why.
 - Otherwise rate how strong the candidate's (spoken) answer appears: depth, clarity, relevance, and technical correctness where applicable.
 - Be concise and fair; transcript may be imperfect.
-- Suggest up to **3 short, specific follow-up questions** the interviewer could ask next to dig
-  deeper, probe weak spots, or verify claims. Each question should:
-    * Be one sentence, ≤ ~20 words.
-    * Build directly on something the candidate just said, not generic ("Tell me about a project…").
-    * Stay relevant to the role/topics above.
-  If answerQuality is "n/a" (small talk / silence / interviewer-only), return an empty array.
+- Suggest **one** short next question (≤ ~20 words) the interviewer could ask to dig deeper.
+  Build on what the candidate just said — not generic. If answerQuality is "n/a", return [].
+- Write "summary" as a **one-sentence scoring hint** (what a strong vs weak answer would show).
 
 LANGUAGE: The transcript may be in Serbian (Cyrillic or Latin), English, or a mix. **Always write
 "summary" and every entry in "followUpQuestions" in English** even if the source is Serbian.
 
 Respond with ONLY valid JSON (no markdown):
 {
-  "summary": "<2-4 sentences for the interviewer>",
+  "summary": "<one-sentence scoring hint for the interviewer>",
   "score": <integer 1-10, or 0 if n/a>,
   "answerQuality": "<one of: strong, adequate, weak, insufficient, n/a>",
-  "followUpQuestions": ["<question 1>", "<question 2>", "<question 3>"]
+  "followUpQuestions": ["<single next best question, or empty if n/a>"]
 }`;
 
     const userContent = `RECENT TYPED CHAT (for question context):\n${chatBlock}\n\nSPOKEN TRANSCRIPT WINDOW:\n${transcriptWindow}`;

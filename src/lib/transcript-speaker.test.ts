@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveTranscriptSpeakerLabel } from "./transcript-speaker";
+import { formatTranscriptSpeakerDisplay, resolveTranscriptSpeakerLabel } from "./transcript-speaker";
+import type { Participant } from "@/types/room";
 
 describe("resolveTranscriptSpeakerLabel", () => {
   it("uses setup candidate name for candidate role", () => {
@@ -13,5 +14,21 @@ describe("resolveTranscriptSpeakerLabel", () => {
       speaker: "Marko",
       speakerRole: "interviewer",
     });
+  });
+});
+
+describe("formatTranscriptSpeakerDisplay", () => {
+  const peers: Participant[] = [
+    { id: "a", name: "Jovan", role: "interviewer", joinedAt: 1 },
+    { id: "b", name: "Jovan", role: "interviewer", joinedAt: 2 },
+  ];
+
+  it("suffixes duplicate interviewer names", () => {
+    expect(
+      formatTranscriptSpeakerDisplay(
+        { speaker: "Jovan", speakerRole: "interviewer", participantId: "b" },
+        peers
+      )
+    ).toBe("Jovan #2");
   });
 });

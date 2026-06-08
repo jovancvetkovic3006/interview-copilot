@@ -2,6 +2,7 @@ import type * as Party from "partykit/server";
 import { interviewDurationMinutes } from "@/lib/interview-deadline";
 import { buildInterviewTimeBroadcastPayload } from "@/lib/interview-timer";
 import { upsertQuestionScoreEntry } from "@/lib/question-scoring";
+import { resolveTranscriptSpeakerLabel } from "@/lib/transcript-speaker";
 
 /** Mirrors `TranscriptAnalysisEntry` in src/types/room.ts (kept local for PartyKit bundle). */
 interface TranscriptAnalysisEntry {
@@ -61,8 +62,10 @@ export type RoomMessage =
       text: string;
       speaker: string;
       speakerRole?: "interviewer" | "candidate";
+      participantId?: string;
       timestamp: number;
     }
+  | { type: "transcript-recording"; participantId: string; recording: boolean }
   | { type: "transcript-analysis"; analysis: TranscriptAnalysisEntry }
   | { type: "interview-report"; report: InterviewReport }
   | { type: "sync-request" }
@@ -130,6 +133,7 @@ interface RoomState {
     text: string;
     speaker: string;
     speakerRole?: "interviewer" | "candidate";
+    participantId?: string;
     timestamp: number;
   }[];
   codingTask: unknown | null;
@@ -602,18 +606,52 @@ export default class InterviewRoom implements Party.Server {
       }
 
       case "transcript": {
-        this.state.transcript.push({
-          text: data.text,
-          speaker: data.speaker,
-          ...(data.speakerRole ? { speakerRole: data.speakerRole } : {}),
-          timestamp: data.timestamp,
-        });
-        const preview =
-          data.text.length > 100 ? `${data.text.slice(0, 100)}…` : data.text;
-        console.log(
-          `[transcription/party] transcript speaker=${data.speaker} chars=${data.text.length} lines=${this.state.transcript.length} preview=${JSON.stringify(preview)}`
+        const participantId = this.connToParticipant.get(sender.id);
+        if (!participantId) break;
+        const rosterParticipant = this.state.participants.find((p) => p.id === participantId);
+        if (!rosterParticipant) break;
+
+        const text = typeof data.text === "string" ? data.text.trim() : "";
+        if (!text) break;
+
+        const candidateName =
+          this.state.config &&
+          typeof this.state.config === "object" &&
+          "candidateName" in this.state.config
+            ? String((this.state.config as { candidateName?: string }).candidateName ?? "")
+            : undefined;
+
+        const { speaker, speakerRole } = resolveTranscriptSpeakerLabel(
+          rosterParticipant,
+          candidateName
         );
-        this.room.broadcast(JSON.stringify(data), [sender.id]);
+
+        const entry = {
+          type: "transcript" as const,
+          text,
+          speaker,
+          ...(speakerRole ? { speakerRole } : {}),
+          participantId,
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+
+        this.state.transcript.push({
+          text: entry.text,
+          speaker: entry.speaker,
+          ...(entry.speakerRole ? { speakerRole: entry.speakerRole } : {}),
+          participantId: entry.participantId,
+          timestamp: entry.timestamp,
+        });
+        const preview = text.length > 100 ? `${text.slice(0, 100)}…` : text;
+        console.log(
+          `[transcription/party] transcript speaker=${speaker} role=${speakerRole ?? "?"} participantId=${participantId} chars=${text.length} lines=${this.state.transcript.length} preview=${JSON.stringify(preview)}`
+        );
+        this.room.broadcast(JSON.stringify(entry), [sender.id]);
+        break;
+      }
+
+      case "transcript-recording": {
+        this.room.broadcast(JSON.stringify(data));
         break;
       }
 

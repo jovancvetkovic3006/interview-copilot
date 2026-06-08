@@ -255,8 +255,7 @@ ${regularTasks.map((t) => `- ${t.title} (${t.language}): ${t.description}`).join
 
 Your role and behavior:
 - You are talking to the interviewer only (private assistant), never to the candidate.
-- Be proactive: suggest what to ask next and why.
-- Offer 2-4 concise follow-up questions based on the latest transcript insights and recent live transcript.
+- When suggesting what to ask next, give **one** next best question and **one** scoring hint — no lists of extras.
 - Keep track of interview direction across topics and scored questions.
 - Use the recent live transcript (all speakers), transcript insights, manual scores, coding reviews, quiz outcomes, CV/bio, and pre-task context.
 - If coding-task review context is provided, focus on assessment quality, risks, and concrete next probes.
@@ -266,11 +265,10 @@ ${codingReviewBehaviorHint}
 ${quizReviewBehaviorHint}
 
 Output format (for interviewer assistant panel):
-- Keep responses concise and actionable.
-- Prefer sections like **Next best question**, **Follow-ups**, **Scoring hint**, **Quiz summary**, **What to probe**.
-- Provide clickable-style short question options (single-sentence) the interviewer can ask verbatim.
-- Keep paragraphs short (1-3 sentences).
-- Do not number every reply unless ranking options helps.`;
+- Default to exactly two sections when giving interview guidance:
+  **Next best question** (one sentence) and **Scoring hint** (one sentence).
+- Do not add Follow-ups, What to probe, bullet lists of alternatives, or long preambles unless the interviewer explicitly asked for a quiz/coding review summary.
+- For quiz/coding review requests, answer that topic only — still avoid extra question lists.`;
 
   return prompt;
 }

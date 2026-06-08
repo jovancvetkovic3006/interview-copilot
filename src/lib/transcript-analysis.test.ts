@@ -44,7 +44,8 @@ describe("normalizeTranscriptAnalysisResponse", () => {
 
     expect(entry?.answerQuality).toBe("strong");
     expect(entry?.score).toBe(8);
-    expect(entry?.followUpQuestions).toHaveLength(2);
+    expect(entry?.followUpQuestions).toHaveLength(1);
+    expect(entry?.followUpQuestions?.[0]).toBe("How would you size the map?");
   });
 
   it("strips follow-ups for n/a windows", () => {
