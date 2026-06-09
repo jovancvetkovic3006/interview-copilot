@@ -38,7 +38,7 @@ export function buildSpokenSectionForReport(input: SpokenSectionInput): string {
   const transcriptLines = input.transcriptLines ?? [];
 
   if (!hasUsableTranscript(transcriptLines)) {
-    return "(no spoken transcript captured — use INTERVIEWER SESSION NOTES below for verbal discussion context)";
+    return "(none)";
   }
 
   const transcriptSummaryText = (input.clientProvidedSummary ?? input.transcriptSummaryText ?? "").trim();
@@ -56,8 +56,7 @@ ${truncate(transcriptTailBlock, 30_000)}`;
   }
 
   if (input.transcriptSummaryError) {
-    return `(summarization unavailable: ${input.transcriptSummaryError} — falling back to raw transcript tail)
-${truncate(transcriptTailBlock, 60_000)}`;
+    return truncate(transcriptTailBlock, 60_000);
   }
 
   if (transcriptLines.length > threshold) {

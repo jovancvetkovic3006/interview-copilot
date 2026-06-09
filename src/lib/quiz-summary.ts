@@ -102,3 +102,23 @@ Score: ${ctx.correctCount}/${ctx.totalQuestions} (${ctx.percentCorrect}%) · Ans
 
   return `${header}\n\nPer question:\n${lines.join("\n\n")}`;
 }
+
+export function getFailedQuizQuestions(ctx: LiveQuizAgentContext): LiveQuizQuestionResult[] {
+  return ctx.questions.filter((q) => q.skipped || q.isCorrect === false);
+}
+
+/** Wrong/skipped items only — for focused quiz review prompts. */
+export function formatFailedQuizQuestionsForPrompt(ctx: LiveQuizAgentContext): string {
+  const failed = getFailedQuizQuestions(ctx);
+  if (failed.length === 0) {
+    return "(No wrong or skipped answers.)";
+  }
+  return failed
+    .map((q) => {
+      if (q.skipped) {
+        return `Q${q.index}. [skipped] ${q.question}\n   Correct: ${q.correctOption}`;
+      }
+      return `Q${q.index}. [wrong] ${q.question}\n   Picked: ${q.picked}\n   Correct: ${q.correctOption}`;
+    })
+    .join("\n\n");
+}

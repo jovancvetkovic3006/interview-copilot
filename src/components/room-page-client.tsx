@@ -47,6 +47,7 @@ import {
 } from "@/lib/agent-room-config";
 import { buildLiveQuizAgentPayload } from "@/lib/room-assignment";
 import { buildLiveQuizAgentContext } from "@/lib/quiz-summary";
+import { buildQuizReviewPromptHint } from "@/lib/chat-quiz-prompt";
 import {
   buildTranscriptAnalysisWindow,
   normalizeTranscriptAnalysisResponse,
@@ -73,9 +74,10 @@ import {
 } from "@/lib/transcript-speaker";
 import {
   compactAgentSuggestionReply,
+  buildQuestionScoreFollowUpPromptHint,
+  compactNextQuestionsReply,
   PROACTIVE_SUGGESTION_MIN_INTERVAL_MS,
   PROACTIVE_SUGGESTION_PROMPT_HINT,
-  QUESTION_SCORE_SUGGESTION_PROMPT_HINT,
 } from "@/lib/agent-suggestion-format";
 import { resolveActiveStep, sessionIsLive, type RoomUiStep } from "@/lib/room-step";
 import {
@@ -949,72 +951,102 @@ export function RoomPageClient({ roomCode, inviteRole }: RoomPageClientProps) {
     resolveAgentApiConfig,
   ]);
 
-  const handleReviewQuiz = useCallback(async () => {
-    if (!participant || participant.role !== "interviewer") return;
-    if (phase !== "interview") return;
-    const quiz = activeQuiz as ActiveQuiz | null;
-    if (!quiz?.questions?.length) return;
+  const handleReviewQuiz = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!participant || participant.role !== "interviewer") return;
+      if (phase !== "interview") return;
+      const quiz = activeQuiz as ActiveQuiz | null;
+      if (!quiz?.questions?.length) return;
 
-    const ctx = buildLiveQuizAgentContext(quiz, quizAnswers, {
-      submission: quizSubmission,
-      candidateStarted: quizCandidateStarted,
-    });
-    const statusLabel =
-      ctx.status === "complete"
-        ? "completed"
-        : ctx.status === "in-progress"
-          ? "in progress"
-          : "assigned (not started)";
-
-    const msg = {
-      id: `msg-${Date.now()}`,
-      role: "user" as const,
-      content: `Requested AI review of live quiz "${quiz.title}" (${statusLabel}, ${ctx.correctCount}/${ctx.totalQuestions} correct so far).`,
-      senderName: participant.name,
-      timestamp: Date.now(),
-    };
-    sendChat(msg);
-    setAgentTyping(true);
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...messages, msg].map((m) => ({
-            role: m.role === "agent" ? "agent" : "interviewer",
-            content: m.content,
-          })),
-          config: resolveAgentApiConfig(roomConfig),
-          promptHint: `The interviewer asked you to review the live quiz "${quiz.title}" (status: ${ctx.status}).
-Summarize how the candidate performed (${ctx.correctCount}/${ctx.totalQuestions} correct, ${ctx.percentCorrect}%).
-Call out weak topics and any skipped or slow questions.
-Suggest 3-5 specific verbal follow-up questions to probe mistakes or confirm strengths — reference question numbers/topics when helpful.
-If the quiz is still in progress, note what is provisional and what to watch for in remaining answers.`,
-        }),
+      const ctx = buildLiveQuizAgentContext(quiz, quizAnswers, {
+        submission: quizSubmission,
+        candidateStarted: quizCandidateStarted,
       });
-      const text = await res.text();
-      if (text) {
-        const data = JSON.parse(text) as { content?: string };
-        if (data.content) sendAgentResponse(data.content);
+      const statusLabel =
+        ctx.status === "complete"
+          ? "completed"
+          : ctx.status === "in-progress"
+            ? "in progress"
+            : "assigned (not started)";
+
+      const requestMsg = {
+        id: `msg-${Date.now()}`,
+        role: "user" as const,
+        content: `Requested AI review of live quiz "${quiz.title}" (${statusLabel}, ${ctx.correctCount}/${ctx.totalQuestions} correct so far).`,
+        senderName: participant.name,
+        timestamp: Date.now(),
+      };
+      if (!options?.silent) {
+        sendChat(requestMsg);
       }
-    } catch (err) {
-      console.error("Quiz review agent error:", err);
-    } finally {
-      setAgentTyping(false);
+      setAgentTyping(true);
+      try {
+        const thread = options?.silent
+          ? messagesLiveRef.current
+          : [...messagesLiveRef.current, requestMsg];
+        const agentCfg = resolveAgentApiConfig(roomConfigLiveRef.current);
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: thread.map((m) => ({
+              role: m.role === "agent" ? "agent" : "interviewer",
+              content: m.content,
+            })),
+            config: {
+              role: agentCfg.role,
+              ...(agentCfg.roles ? { roles: agentCfg.roles } : {}),
+              difficulty: agentCfg.difficulty,
+              topics: agentCfg.topics,
+              candidateName: agentCfg.candidateName,
+              collaborativeRoom: true,
+            },
+            promptHint: buildQuizReviewPromptHint(ctx),
+          }),
+        });
+        const text = await res.text();
+        if (text) {
+          const data = JSON.parse(text) as { content?: string };
+          if (data.content) sendAgentResponse(data.content);
+        }
+      } catch (err) {
+        console.error("Quiz review agent error:", err);
+      } finally {
+        setAgentTyping(false);
+      }
+    },
+    [
+      participant,
+      phase,
+      activeQuiz,
+      quizAnswers,
+      quizSubmission,
+      quizCandidateStarted,
+      sendChat,
+      sendAgentResponse,
+      resolveAgentApiConfig,
+    ]
+  );
+
+  const prevQuizSubmittedAtRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (!isHost || !isInterviewer || phase !== "interview") return;
+    const quiz = activeQuiz as ActiveQuiz | null;
+    if (!quiz?.quizId || !quiz.questions?.length) return;
+
+    const submittedAt = quizSubmission?.submittedAt ?? null;
+
+    if (prevQuizSubmittedAtRef.current === undefined) {
+      prevQuizSubmittedAtRef.current = submittedAt;
+      return;
     }
-  }, [
-    participant,
-    phase,
-    activeQuiz,
-    quizAnswers,
-    quizSubmission,
-    quizCandidateStarted,
-    messages,
-    roomConfig,
-    sendChat,
-    sendAgentResponse,
-    resolveAgentApiConfig,
-  ]);
+
+    const prev = prevQuizSubmittedAtRef.current;
+    prevQuizSubmittedAtRef.current = submittedAt;
+    if (submittedAt === null || submittedAt === prev) return;
+
+    void handleReviewQuiz({ silent: true });
+  }, [quizSubmission?.submittedAt, activeQuiz, isHost, isInterviewer, phase, handleReviewQuiz]);
 
   const handleChatKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1185,7 +1217,7 @@ If the quiz is still in progress, note what is provisional and what to watch for
   const notifyAgentOfQuestionScore = useCallback(
     async (entry: QuestionScoreEntry, isUpdate: boolean) => {
       if (!participant || participant.role !== "interviewer") return;
-      const scoreLine = formatQuestionScoreChatLine(entry);
+      const cfg = resolveAgentApiConfig(roomConfigLiveRef.current);
       setAgentTyping(true);
       try {
         const res = await fetch("/api/chat", {
@@ -1193,29 +1225,32 @@ If the quiz is still in progress, note what is provisional and what to watch for
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [
-              ...messagesLiveRef.current,
               {
-                id: `msg-score-${entry.id}-${entry.scoredAt}`,
-                role: "user" as const,
-                content: scoreLine,
-                senderName: participant.name,
-                timestamp: Date.now(),
+                role: "interviewer",
+                content: `I asked the candidate: "${entry.question}"\nI rated their answer: ${entry.score}/10 (${scoreLevelShortLabel(entry.score)}).`,
               },
-            ].map((m) => ({
-              role: m.role === "agent" ? "agent" : "interviewer",
-              content: m.content,
-            })),
-            config: resolveAgentApiConfig(roomConfigLiveRef.current),
-            promptHint: `${QUESTION_SCORE_SUGGESTION_PROMPT_HINT} Question: "${entry.question}". ${
-              isUpdate ? "Updated" : "New"
-            } score: ${entry.score}/10 (${scoreLevelShortLabel(entry.score)}).`,
+            ],
+            config: {
+              role: cfg.role,
+              ...(cfg.roles ? { roles: cfg.roles } : {}),
+              difficulty: cfg.difficulty,
+              topics: cfg.topics,
+              candidateName: cfg.candidateName,
+              collaborativeRoom: true,
+            },
+            promptHint: buildQuestionScoreFollowUpPromptHint({
+              question: entry.question,
+              score: entry.score,
+              category: entry.category,
+              isUpdate,
+            }),
           }),
         });
         const text = await res.text();
         if (text) {
           const data = JSON.parse(text) as { content?: string };
           if (data.content) {
-            sendAgentResponse(compactAgentSuggestionReply(data.content));
+            sendAgentResponse(compactNextQuestionsReply(data.content));
           }
         }
       } catch (err) {
@@ -1274,39 +1309,11 @@ If the quiz is still in progress, note what is provisional and what to watch for
         questionId: meta?.questionId,
         category: meta?.category,
       });
-
-      setAgentTyping(true);
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [...messagesLiveRef.current, msg].map((m) => ({
-              role: m.role === "agent" ? "agent" : "interviewer",
-              content: m.content,
-            })),
-            config: resolveAgentApiConfig(roomConfigLiveRef.current),
-            promptHint:
-              "The interviewer just asked a question. After your response, remind them to rate the candidate's answer using the 10-level score prompt.",
-          }),
-        });
-        const text = await res.text();
-        if (text) {
-          const data = JSON.parse(text) as { content?: string };
-          if (data.content) sendAgentResponse(data.content);
-        }
-      } catch (err) {
-        console.error("Send-question agent error:", err);
-      } finally {
-        setAgentTyping(false);
-      }
     },
-    [participant, sendChat, sendAgentResponse, resolveAgentApiConfig]
+    [participant, sendChat]
   );
 
-  /**
-   * Posting a curated question into chat AND firing the agent in one go.
-   */
+  /** Post a curated question into chat; agent suggests next questions after the score is submitted. */
   const handleSendQuestion = useCallback(
     async (question: string, meta?: { questionId?: string; category?: string }) => {
       await handleSendQuestionWithScore(question, meta);

@@ -56,40 +56,24 @@ export async function summarizeTranscript(input: SummarizeTranscriptInput): Prom
   const joined = transcript.map((t) => `${t.speaker}: ${t.text}`).join("\n");
   const transcriptBody = truncateMiddle(joined, MAX_TRANSCRIPT_CHARS);
 
-  const system = `You are summarizing a TECHNICAL INTERVIEW spoken transcript for the hiring panel.
-The interview is for a ${difficulty || "mid"}-level ${role || "software"} role. Topics: ${(topics || ["general"]).join(", ")}.
-Primary candidate: ${candidateName || "the candidate"}.
+  const system = `Summarize a technical interview transcript for the hiring panel.
+Role: ${difficulty || "mid"}-level ${role || "software"}. Topics: ${(topics || ["general"]).join(", ")}. Candidate: ${candidateName || "the candidate"}.
 
-The transcript was captured by browser speech-to-text and may contain recognition errors.
-Mark uncertain interpretations with "(unclear)". Do NOT invent facts not supported by the transcript.
+Rules:
+- Facts from the transcript only. Do not invent.
+- Omit a section when there is nothing to say. Never mention missing data, STT limits, or what you could not infer.
+- No process commentary or hedging paragraphs. Short bullets and sentences only.
+- Mark a specific garbled phrase "(unclear)" inline — do not discuss recognition quality globally.
+- English only. Non-English quotes: original + [English: "…"].
 
-LANGUAGE: The transcript may be in Serbian (Cyrillic or Latin), English, or a mix.
-**Write the entire summary in English.** When you include a direct candidate quote that was not
-spoken in English, present the original quote followed by an English translation in brackets, e.g.
-> "Originalna recenica." [English: "Original sentence."]
+Sections (skip empty ones):
+## Overview — 1–2 sentences
+## Topics — chronological bullets: topic + outcome (one line each)
+## Strengths — up to 4 bullets; short quotes when clear
+## Gaps — up to 4 bullets; struggles visible in the transcript only
+## Q&A — substantive questions → one-line outcome each
 
-Produce a concise, structured **Markdown** summary with these sections (in this order):
-
-## Overview
-2-4 sentence narrative of how the interview went end-to-end.
-
-## Topics covered (chronological)
-Bullet list. Each bullet: the topic + a 1-sentence note about depth and outcome.
-
-## Candidate strengths
-Bullets with **verbatim short quotes** ("...") from the candidate as evidence when possible.
-
-## Candidate gaps / struggles
-Bullets with quotes when relevant. Distinguish "didn't know X" from "explained X awkwardly".
-
-## Questions asked and how they were handled
-Bullet list mapping each substantive question to a one-line outcome (answered well / partial / struggled / skipped).
-
-## Notable moments
-Anything worth flagging — long silences, off-topic detours, particularly strong insight, hesitation patterns, etc.
-
-Keep the whole summary under ~800 words. Use \`>\` blockquotes for direct candidate quotes.
-Output ONLY the Markdown — no preamble, no code-fence wrapper around the document.`;
+Max ~400 words. Markdown only — no preamble, no wrapper code fence.`;
 
   let lastError: unknown = null;
   for (const model of MODEL_FALLBACK_CHAIN) {
@@ -99,7 +83,7 @@ Output ONLY the Markdown — no preamble, no code-fence wrapper around the docum
         system,
         messages: [{ role: "user", content: `SPOKEN TRANSCRIPT:\n${transcriptBody}` }],
         temperature: 0.2,
-        max_tokens: 2500,
+        max_tokens: 1200,
       });
       const text =
         completion.content[0]?.type === "text" ? completion.content[0].text.trim() : "";

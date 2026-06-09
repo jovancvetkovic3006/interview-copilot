@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
     const finalCodeTrimmed = (finalCode ?? "").trim();
     const finalCodeBlock = finalCodeTrimmed
       ? `\`\`\`${codingLang}\n${truncate(finalCodeTrimmed, 30_000)}\n\`\`\``
-      : "(no in-room coding task code captured — either no task was assigned, or the candidate left the editor empty)";
+      : "(none)";
 
     /**
      * Spoken-transcript context for the report.
@@ -221,8 +221,8 @@ ${configStr}
 CODING TASK METADATA (the last assigned task definition — same as the final editor context unless no task was open):
 ${codingStr}
 
-CODING TASK ASSIGNMENT TIMELINE (chronological — each time a **new** shared-editor exercise was opened in the room; use this for the report's **Coding summary** section. The optional \`source\` field distinguishes e.g. take-home preload vs external PRE-TASK vs a normal live assignment):
-${codingTaskHistorySanitized.length > 0 ? codingTaskHistoryStr : "(no timeline rows supplied — infer coding work only from chat, transcript, and the single-task metadata above)"}
+CODING TASK ASSIGNMENT TIMELINE (chronological):
+${codingTaskHistorySanitized.length > 0 ? codingTaskHistoryStr : "(none)"}
 
 FINAL CODE FROM THE SHARED IN-ROOM EDITOR (the candidate's actual code at end-of-interview, including any edits made to a pre-loaded take-home submission):
 ${finalCodeBlock}
@@ -230,8 +230,8 @@ ${finalCodeBlock}
 FULL TYPED CHAT + AGENT (most recent last, truncated if huge):
 ${truncate(chatBlock, 70_000)}
 
-INTERVIEWER SESSION NOTES (host's first-person observations and impressions captured during or right after the interview — treat as **primary, first-class evidence**, equal in weight to the spoken transcript when both are present; never treat as fallback-only):
-${sessionNotesTrimmed ? truncate(sessionNotesTrimmed, 16_000) : "(none provided)"}
+INTERVIEWER SESSION NOTES:
+${sessionNotesTrimmed ? truncate(sessionNotesTrimmed, 16_000) : "(none)"}
 
 SPOKEN TRANSCRIPT (chronological, may contain STT errors):
 ${spokenSection}
@@ -239,44 +239,39 @@ ${spokenSection}
 SPEECH INSIGHT SNIPPETS (interviewer-only per-answer analyses captured live during the session):
 ${analysisBlock || "(none)"}
 
-MANUAL QUESTION SCORES (interviewer-rated 1–10 after asking curated questions — primary signal when no transcript; must appear in report):
+MANUAL QUESTION SCORES:
 ${questionScoreBlock || "(none)"}
 
-LIVE QUIZ RESULTS (if a quiz was assigned during the session):
-${quizBlock}
+LIVE QUIZ RESULTS:
+${quizBlock || "(none)"}
 
-EVIDENCE POLICY:
-- The **spoken transcript** and the **interviewer session notes** are **complementary**. When both are present, use **both** — they do not cancel each other out and you must not pick one and ignore the other. The transcript captures what was literally said (with possible STT noise); the notes capture the host's interpretation, off-mic discussion, body language cues, and judgement that the recording cannot show. Cross-reference them.
-- When only **one** of the two is present, lean on that one and say so once in the executive summary (e.g. "Based on interviewer notes only — no live recording was captured." or "Based on the spoken transcript — no additional interviewer notes were provided.").
-- Typed chat, speech-insight snippets, and the coding timeline are supporting evidence; treat them as such, not as substitutes for transcript or notes.
+Write a concise **Markdown** report for PDF export.
 
-Write a structured **Markdown** report suitable for PDF export. Include:
-1. Title with role/difficulty and candidate name if inferable
-2. Executive summary (5–8 bullets) — note here which evidence sources were available (transcript / notes / both) so the reader knows what the report is grounded in.
-3. **Coding summary** — Use **CODING TASK ASSIGNMENT TIMELINE** above. List every distinct exercise that was opened in the shared editor during this session **in order** (or state clearly if the timeline is empty / not supplied). For **each** entry: title, language, and task type when inferable from \`source\` (e.g. \`pre-interview-task\` = take-home submission pre-loaded, \`external-pre-task\` = pasted external PRE-TASK, omitted = typical live assignment). Summarize what was asked (from the description) and **how the candidate tackled it** — reasoning, approach, struggles, and outcomes — grounded in **chat**, **spoken transcript**, **interviewer session notes**, and **speech insight snippets**. If multiple tasks were used, compare briefly how performance shifted across them. If the timeline has only one row, still write this section in full.
-3b. **Quiz summary** — If LIVE QUIZ RESULTS are present, summarize performance and notable misses.
-3c. **Verbal question scores** — If MANUAL QUESTION SCORES are present, include a table or bullet list of each question with its 1–10 score and a one-line interpretation; note patterns (strong topics vs weak).
-4. **Strengths observed** — base these on **all** available evidence: the structured transcript summary, chat, **and the interviewer session notes**. When both transcript and notes are present, cite at least one observation grounded in the notes and at least one grounded in the transcript whenever possible. Use short verbatim quotes when supported.
-5. **Gaps / risks / follow-up questions** — same evidence requirement as Strengths. Notes often surface concerns the transcript will not show (off-mic confusion, hesitation, attitude); do not omit them.
-6. **Coding depth (final editor state)** — The **FINAL CODE** block is a snapshot of the **last** active shared coding task only (not every prior exercise). Read it when present and assess: correctness, edge cases handled / missed, complexity, code style, and how the candidate evolved the code during the discussion (chat/transcript/notes may show their reasoning). Quote short snippets when calling out specific issues.
-7. Recommended decision hint (hire / no-hire / more rounds) — phrased as guidance for humans, not a command. Reflect both transcript and notes when both informed the decision.
-8. Optional: timeline table if useful
+OUTPUT RULES (strict):
+- English only. Facts from the materials above only — do not invent.
+- When a block above is "(none)", **omit** the matching section entirely. Never mention absent data, limitations, or what you could not assess.
+- No meta-commentary, no reasoning about your process, no evidence-source disclaimers.
+- Short bullets and sentences. No paragraph longer than two sentences.
 
-LANGUAGE: The transcript / chat may be in Serbian (Cyrillic or Latin), English, or a mix.
-**Write the entire report in English regardless of the source language.** When citing a candidate
-quote that was not spoken in English, include the original line followed by an English translation
-in brackets, e.g. > "Originalna recenica." [English: "Original sentence."]
+Sections (include only when supported by data):
+1. **Title** — role, difficulty, candidate name when known
+2. **Summary** — 3–5 bullets, outcomes only
+3. **Coding** — one bullet per timeline exercise (task + how they did); add a brief note on final code quality only when FINAL CODE is not "(none)"
+4. **Quiz** — score + wrong/skipped items only
+5. **Verbal scores** — each question with score and one-line note
+6. **Strengths** — up to 5 bullets; short quotes when useful
+7. **Gaps & follow-ups** — up to 5 bullets; concrete follow-up questions for weak areas
+8. **Recommendation** — one line (hire / no-hire / more rounds)
 
-Tone: professional, concise, fair. Do not invent facts not supported by the materials.
-Output **only** Markdown (no JSON wrapper, no code fences around the whole document).`;
+Non-English quotes: original + [English: "…"]. Output Markdown only — no JSON, no wrapper code fence.`;
 
     const client = getAnthropicClient();
     const completion = await createMessageWithFallback(client, {
       system:
-        "You produce interview close-out documentation for internal hiring use only. Output Markdown only. Always write the report in English even if the source materials are in Serbian or another language. Use a clear second-level Markdown heading for the coding summary section (e.g. ## Coding summary).",
+        "You write concise post-interview reports for internal hiring use. Markdown only, English only. State only what the provided materials support. Omit sections with no data — never discuss missing inputs or your inference process.",
       messages: [{ role: "user", content: userContent }],
       temperature: 0.35,
-      max_tokens: 7000,
+      max_tokens: 4000,
     });
 
     let markdown =

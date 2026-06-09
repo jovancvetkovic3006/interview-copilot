@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildLiveQuizAgentContext } from "./quiz-summary";
-import { appendLiveQuizToSystemPrompt } from "./chat-quiz-prompt";
+import { appendLiveQuizToSystemPrompt, buildQuizReviewPromptHint } from "./chat-quiz-prompt";
 import type { ActiveQuiz } from "@/types/quiz";
 
 const quiz: ActiveQuiz = {
@@ -47,5 +47,18 @@ describe("appendLiveQuizToSystemPrompt", () => {
     expect(prompt).toContain("[wrong]");
     expect(includesReviewHints).toBe(true);
     expect(prompt).not.toContain("Do not reveal correct answers to the candidate");
+  });
+});
+
+describe("buildQuizReviewPromptHint", () => {
+  it("focuses on failed items and short follow-up format", () => {
+    const ctx = buildLiveQuizAgentContext(quiz, [
+      { questionId: "a", selectedIndex: 1, answeredAt: 1, timeSpentMs: 2000 },
+    ]);
+    const hint = buildQuizReviewPromptHint(ctx);
+    expect(hint).toContain("**Failed**");
+    expect(hint).toContain("**Ask the candidate**");
+    expect(hint).toContain("[wrong]");
+    expect(hint).toContain("Do NOT recap the score");
   });
 });

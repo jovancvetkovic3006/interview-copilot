@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ActiveQuiz, QuizAnswerEntry } from "@/types/quiz";
-import { buildLiveQuizAgentContext, formatLiveQuizForPrompt, resolveQuizAnswers } from "./quiz-summary";
+import {
+  buildLiveQuizAgentContext,
+  formatFailedQuizQuestionsForPrompt,
+  formatLiveQuizForPrompt,
+  resolveQuizAnswers,
+} from "./quiz-summary";
 
 const sampleQuiz: ActiveQuiz = {
   quizId: "live-1",
@@ -77,5 +82,16 @@ describe("buildLiveQuizAgentContext", () => {
     expect(prompt).toContain("Score: 1/2 (50%)");
     expect(prompt).toContain("[wrong]");
     expect(prompt).toContain("Correct: true");
+  });
+
+  it("formats only failed quiz questions for review prompt", () => {
+    const ctx = buildLiveQuizAgentContext(sampleQuiz, [
+      { questionId: "q1", selectedIndex: 0, answeredAt: 1, timeSpentMs: 3000 },
+      { questionId: "q2", selectedIndex: 1, answeredAt: 2, timeSpentMs: 4000 },
+    ]);
+    const failed = formatFailedQuizQuestionsForPrompt(ctx);
+    expect(failed).toContain("Q2");
+    expect(failed).toContain("[wrong]");
+    expect(failed).not.toContain("Q1");
   });
 });

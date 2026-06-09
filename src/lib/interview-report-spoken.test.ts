@@ -24,10 +24,9 @@ describe("shouldSummarizeTranscriptBeforeReport", () => {
 });
 
 describe("buildSpokenSectionForReport", () => {
-  it("tells the model to use session notes when no transcript exists", () => {
+  it("returns none when no transcript exists", () => {
     const section = buildSpokenSectionForReport({ transcriptLines: [] });
-    expect(section).toContain("no spoken transcript");
-    expect(section).toContain("INTERVIEWER SESSION NOTES");
+    expect(section).toBe("(none)");
   });
 
   it("includes summary and tail for long interviews", () => {
@@ -55,7 +54,7 @@ describe("buildSpokenSectionForReport", () => {
       transcriptLines: lines,
       transcriptSummaryError: "API timeout",
     });
-    expect(section).toContain("summarization unavailable");
+    expect(section).not.toContain("summarization unavailable");
     expect(section).toContain("React is a UI library");
   });
 });
